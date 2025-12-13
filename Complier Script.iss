@@ -37,7 +37,7 @@ DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=commandline
-OutputBaseFilename=Ikiflow-setup-v1.0.3
+OutputBaseFilename=IkiflowSetup
 SetupIconFile=E:\Experiment\Ikiflow\Ikiflow setup.ico
 SolidCompression=yes
 WizardStyle=modern zircon

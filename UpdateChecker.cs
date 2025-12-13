@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Diagnostics;
 
 namespace Ikiflow
 {
@@ -19,33 +20,40 @@ namespace Ikiflow
                 var json = await client.GetStringAsync(UpdateUrl);
 
                 var doc = JsonDocument.Parse(json);
-                var latest = doc.RootElement.GetProperty("latestVersion").GetString();
-                var url = doc.RootElement.GetProperty("downloadUrl").GetString();
+                var latestString = doc.RootElement.GetProperty("latestVersion").GetString();
+                var downloadUrl = doc.RootElement.GetProperty("downloadUrl").GetString();
 
-                var current = typeof(App).Assembly.GetName().Version?.ToString();
+                if (latestString == null || downloadUrl == null)
+                    return;
 
-                if (latest != null && current != null && latest != current)
+                // ✅ Proper version comparison
+                var latestVersion = new Version(latestString);
+                var currentVersion = typeof(App).Assembly.GetName().Version;
+
+                if (currentVersion == null)
+                    return;
+
+                if (latestVersion > currentVersion)
                 {
                     var result = MessageBox.Show(
-                        $"New update available!\n\nCurrent: {current}\nLatest: {latest}",
+                        $"New update available!\n\nCurrent: {currentVersion}\nLatest: {latestVersion}",
                         "Ikiflow Update",
                         MessageBoxButton.YesNo,
                         MessageBoxImage.Information);
 
                     if (result == MessageBoxResult.Yes)
                     {
-                        System.Diagnostics.Process.Start(
-                            new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = url,
-                                UseShellExecute = true
-                            });
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = downloadUrl,
+                            UseShellExecute = true
+                        });
                     }
                 }
             }
             catch
             {
-                // Silent fail — no internet, no noise
+                // silent fail
             }
         }
     }
