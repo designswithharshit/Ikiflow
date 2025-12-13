@@ -10,12 +10,11 @@
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
-#define MyOutputName "Ikiflow_Setup_" + MyAppVersion
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId={{84CD0E6E-1215-4973-B1EC-F9D5FB5CA20A}
+AppId={{4765A9CB-85B4-4AFC-B38B-BA288781A24E}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
@@ -37,7 +36,7 @@ ChangesAssociations=yes
 DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=lowest
-OutputDir=E:\Experiment\C#game\Output Release
+PrivilegesRequiredOverridesAllowed=commandline
 OutputBaseFilename=Ikiflow-setup-v1.0.3
 SetupIconFile=E:\Experiment\Ikiflow\Ikiflow setup.ico
 SolidCompression=yes
@@ -50,25 +49,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "C:\Program Files (x86)\Inno Setup 6\Examples\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\D3DCompiler_47_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\Ikiflow.deps.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\Ikiflow.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\Ikiflow.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\Ikiflow.pdb"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\Ikiflow.runtimeconfig.json"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\PenImc_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\PresentationNative_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Converters.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Core.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Css.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Dom.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Model.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Rendering.Gdi.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Rendering.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\SharpVectors.Runtime.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\vcruntime140_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\win-x64\publish\wpfgfx_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "E:\Experiment\Ikiflow\bin\Release\net8.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
