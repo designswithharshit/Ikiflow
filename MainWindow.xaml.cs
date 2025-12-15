@@ -114,6 +114,9 @@ namespace Ikiflow
                 _widget = new FloatingWidget();
                 _widget.Show();
             }
+
+            this.WindowState = WindowState.Minimized;
+
         }
 
         private void PauseBtn_Click(object sender, RoutedEventArgs e)
@@ -203,5 +206,17 @@ namespace Ikiflow
         {
             ShowOverlay();
         }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _timer?.Stop();
+            _widget?.Close();
+            _widget = null;
+
+            Application.Current.Shutdown();
+            base.OnClosed(e);
+        }
+        
     }
+    
 }
