@@ -15,5 +15,21 @@
     <PackageReference Include="SharpVectors" Version="1.8.5" />
     <Content Include="Ikiflow Icon.ico" />
 
+    <Content Include="Sounds\click.wav">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+ 	  </Content>
+ 	  <Content Include="Sounds\tick.wav">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  	</Content>
+ 	  <Content Include="Sounds\overlay.wav">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  	</Content>
+ 	  <Content Include="Sounds\repeat.wav">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  	</Content>
+    <Content Include="Sounds\shutdown.wav">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  	</Content>
+
   </ItemGroup>
 </Project>

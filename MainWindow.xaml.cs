@@ -17,6 +17,7 @@ namespace Ikiflow
         private TimeSpan _remaining;
         private bool _isRunning;
         private bool _uiReady = false;
+        private bool _autoRepeat = true;
 
         public MainWindow()
         {
@@ -30,7 +31,7 @@ namespace Ikiflow
             };
             _timer.Tick += Timer_Tick;
 
-            _uiReady = true; // VERY IMPORTANT
+            _uiReady = true;
         }
 
         // =========================
@@ -45,19 +46,19 @@ namespace Ikiflow
 
             IntervalLabel.Text = $"{minutes} min";
 
-            // UI only
             if (!_isRunning)
             {
                 CountdownText.Text = "Next: --";
                 Title = "Ikiflow";
             }
+
+            PlaySound("tick.wav");
         }
 
         // =========================
         // BREAK TIME CONTROL
         // =========================
         private bool _isUpdatingBreak;
-
 
         private void BreakSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -72,7 +73,9 @@ namespace Ikiflow
             BreakLabel.Text = $"{seconds} sec";
 
             _isUpdatingBreak = false;
+
         }
+
         private void BreakInput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             if (!_uiReady || _isUpdatingBreak) return;
@@ -90,15 +93,18 @@ namespace Ikiflow
                 BreakLabel.Text = $"{seconds} sec";
 
                 _isUpdatingBreak = false;
+
+                PlaySound("tick.wav");
             }
         }
-
 
         // =========================
         // START / PAUSE
         // =========================
         private void StartBtn_Click(object sender, RoutedEventArgs e)
         {
+            PlaySound("click.wav");
+
             _remaining = _screenTime;
             _isRunning = true;
             _timer.Start();
@@ -116,7 +122,6 @@ namespace Ikiflow
             }
 
             this.WindowState = WindowState.Minimized;
-
         }
 
         private void PauseBtn_Click(object sender, RoutedEventArgs e)
@@ -190,13 +195,34 @@ namespace Ikiflow
         // =========================
         private void ShowOverlay()
         {
+            PlaySound("overlay.wav");
+
             var overlay = new OverlayWindow((int)_breakTime.TotalSeconds);
+            overlay.Closed += (s, e) =>
+            {
+                if (_autoRepeat)
+                {
+                    PlaySound("repeat.wav"); // ✅ THIS IS THE MISSING PART
+
+                    _remaining = _screenTime;
+                    _isRunning = true;
+                    _timer.Start();
+
+                    StatusText.Text = "Status: Running";
+                    Title = $"Ikiflow — {_remaining:mm\\:ss}";
+
+                    if (_widget == null)
+                    {
+                        _widget = new FloatingWidget();
+                        _widget.Show();
+                    }
+                }
+            };
+
             overlay.Show();
 
-            // Prepare for next cycle
-            StatusText.Text = "Status: Ready";
-            CountdownText.Text = "Next: --";
-            Title = "Ikiflow";
+            StatusText.Text = "Status: Break";
+            CountdownText.Text = "Break time";
         }
 
         // =========================
@@ -216,7 +242,21 @@ namespace Ikiflow
             Application.Current.Shutdown();
             base.OnClosed(e);
         }
-        
+
+        // =========================
+        // SOUND
+        // =========================
+        private void PlaySound(string file)
+        {
+            try
+            {
+                var player = new System.Media.SoundPlayer($"Sounds/{file}");
+                player.Play();
+            }
+            catch
+            {
+                // silent by design
+            }
+        }
     }
-    
 }
