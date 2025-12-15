@@ -3,7 +3,7 @@
 ; Non-commercial use only
 
 #define MyAppName "Ikiflow"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.5"
 #define MyAppPublisher "Harshit Kashyap, 2025"
 #define MyAppURL "https://github.com/designswithharshit"
 #define MyAppExeName "Ikiflow.exe"
