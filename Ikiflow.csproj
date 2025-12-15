@@ -27,9 +27,6 @@
  	  <Content Include="Sounds\repeat.wav">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   	</Content>
-    <Content Include="Sounds\shutdown.wav">
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-  	</Content>
 
   </ItemGroup>
 </Project>
