@@ -11,13 +11,6 @@ namespace Ikiflow
             this.DispatcherUnhandledException += Crash;
         }
 
-        protected override async void OnStartup(StartupEventArgs e)
-        {
-            base.OnStartup(e);
-
-            await UpdateChecker.CheckForUpdateAsync();
-        }
-
         private void Crash(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             MessageBox.Show(
@@ -31,6 +24,20 @@ namespace Ikiflow
             );
 
             e.Handled = true;
+        }
+
+        protected override async void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+
+            try
+            {
+                await UpdateChecker.CheckForUpdateAsync();
+            }
+            catch
+            {
+                // updater must never affect startup
+            }
         }
     }
 }

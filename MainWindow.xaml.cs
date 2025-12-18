@@ -1,6 +1,10 @@
 ﻿using System;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
+using System.Windows.Media;
+using System.Media;
+
 
 namespace Ikiflow
 {
@@ -51,8 +55,6 @@ namespace Ikiflow
                 CountdownText.Text = "Next: --";
                 Title = "Ikiflow";
             }
-
-            PlaySound("tick.wav");
         }
 
         // =========================
@@ -73,7 +75,6 @@ namespace Ikiflow
             BreakLabel.Text = $"{seconds} sec";
 
             _isUpdatingBreak = false;
-
         }
 
         private void BreakInput_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -93,8 +94,6 @@ namespace Ikiflow
                 BreakLabel.Text = $"{seconds} sec";
 
                 _isUpdatingBreak = false;
-
-                PlaySound("tick.wav");
             }
         }
 
@@ -103,8 +102,6 @@ namespace Ikiflow
         // =========================
         private void StartBtn_Click(object sender, RoutedEventArgs e)
         {
-            PlaySound("click.wav");
-
             _remaining = _screenTime;
             _isRunning = true;
             _timer.Start();
@@ -121,7 +118,7 @@ namespace Ikiflow
                 _widget.Show();
             }
 
-            this.WindowState = WindowState.Minimized;
+            WindowState = WindowState.Minimized;
         }
 
         private void PauseBtn_Click(object sender, RoutedEventArgs e)
@@ -195,6 +192,7 @@ namespace Ikiflow
         // =========================
         private void ShowOverlay()
         {
+            // ✅ PRIMARY SOUND: Screen → Break
             PlaySound("overlay.wav");
 
             var overlay = new OverlayWindow((int)_breakTime.TotalSeconds);
@@ -202,7 +200,8 @@ namespace Ikiflow
             {
                 if (_autoRepeat)
                 {
-                    PlaySound("repeat.wav"); // ✅ THIS IS THE MISSING PART
+                    // ◻ OPTIONAL SOUND: Break → Screen
+                    PlaySound("repeat.wav");
 
                     _remaining = _screenTime;
                     _isRunning = true;
@@ -221,7 +220,6 @@ namespace Ikiflow
 
             overlay.Show();
 
-            StatusText.Text = "Status: Break";
             CountdownText.Text = "Break time";
         }
 
@@ -235,7 +233,7 @@ namespace Ikiflow
 
         protected override void OnClosed(EventArgs e)
         {
-            _timer?.Stop();
+            _timer.Stop();
             _widget?.Close();
             _widget = null;
 
@@ -244,19 +242,37 @@ namespace Ikiflow
         }
 
         // =========================
-        // SOUND
+        // SOUND (Bluetooth-safe)
         // =========================
-        private void PlaySound(string file)
+        private void PlaySound(string soundFile)
         {
             try
             {
-                var player = new System.Media.SoundPlayer($"Sounds/{file}");
-                player.Play();
+                var uri = new Uri($"pack://application:,,,/Ikiflow;component/Sounds/{soundFile}");
+                var streamResourceInfo = Application.GetResourceStream(uri);
+                if (streamResourceInfo != null)
+                {
+                    var player = new SoundPlayer(streamResourceInfo.Stream);
+                    player.Play();
+                }
             }
             catch
             {
-                // silent by design
+                // ignore sound errors
             }
         }
+
+        protected override void OnKeyDown(System.Windows.Input.KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+
+            if (e.Key == System.Windows.Input.Key.S &&
+                Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                MessageBox.Show("DEBUG KEY PRESSED");
+                PlaySound("overlay.wav");
+            }
+        }
+
     }
 }

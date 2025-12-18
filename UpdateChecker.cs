@@ -16,44 +16,60 @@ namespace Ikiflow
         {
             try
             {
-                using var client = new HttpClient();
+                using var client = new HttpClient
+                {
+                    Timeout = TimeSpan.FromSeconds(5)
+                };
+
                 var json = await client.GetStringAsync(UpdateUrl);
 
-                var doc = JsonDocument.Parse(json);
-                var latestString = doc.RootElement.GetProperty("latestVersion").GetString();
-                var downloadUrl = doc.RootElement.GetProperty("downloadUrl").GetString();
-
-                if (latestString == null || downloadUrl == null)
+                if (string.IsNullOrWhiteSpace(json))
                     return;
 
-                // ✅ Proper version comparison
-                var latestVersion = new Version(latestString);
-                var currentVersion = typeof(App).Assembly.GetName().Version;
+                using var doc = JsonDocument.Parse(json);
 
+                if (!doc.RootElement.TryGetProperty("latestVersion", out var latestProp))
+                    return;
+
+                if (!doc.RootElement.TryGetProperty("downloadUrl", out var urlProp))
+                    return;
+
+                var latestString = latestProp.GetString();
+                var downloadUrl = urlProp.GetString();
+
+                if (!Version.TryParse(latestString, out var latestVersion))
+                    return;
+
+                var currentVersion = typeof(App).Assembly.GetName().Version;
                 if (currentVersion == null)
                     return;
 
-                if (latestVersion > currentVersion)
-                {
-                    var result = MessageBox.Show(
-                        $"New update available!\n\nCurrent: {currentVersion}\nLatest: {latestVersion}",
-                        "Ikiflow Update",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information);
+                if (latestVersion <= currentVersion)
+                    return;
 
-                    if (result == MessageBoxResult.Yes)
+                var result = MessageBox.Show(
+                    $"New update available.\n\n" +
+                    $"Current: {currentVersion}\n" +
+                    $"Latest: {latestVersion}\n\n" +
+                    $"Download now?",
+                    "Ikiflow Update",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information
+                );
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    Process.Start(new ProcessStartInfo
                     {
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = downloadUrl,
-                            UseShellExecute = true
-                        });
-                    }
+                        FileName = downloadUrl,
+                        UseShellExecute = true
+                    });
                 }
             }
             catch
             {
-                // silent fail
+                // ABSOLUTE RULE:
+                // Updater must never crash the app.
             }
         }
     }
