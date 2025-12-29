@@ -9,10 +9,15 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QTimer, QPoint, QRectF, QSize, QUrl, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QFont, QAction, QIcon, QPixmap
 from PySide6.QtMultimedia import QSoundEffect # For simple sound playback
+# Add QDesktopServices to QtGui imports
+from PySide6.QtGui import QColor, QPainter, QPen, QFont, QAction, QIcon, QPixmap, QDesktopServices
 
+# Add these NEW imports for networking
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PySide6.QtWidgets import QMessageBox # Add QMessageBox to widgets list
 
 # IMPORT THE SETTINGS FILE
-from lumina_settings import SettingsTab
+from Ikiflow_settings import SettingsTab
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -471,6 +476,7 @@ class OverlayWindow(QWidget):
     # Custom signals to talk to MainWindow
     action_break = Signal()
     action_extend = Signal()
+    action_cancelled = Signal()
 
     def __init__(self):
         super().__init__()
@@ -530,6 +536,7 @@ class OverlayWindow(QWidget):
         self.page_break = QWidget()
         l_break = QVBoxLayout(self.page_break)
         l_break.setAlignment(Qt.AlignCenter)
+
         
         self.tips = [
             "Release your jaw.", "Look at something 20 feet away.",
@@ -543,14 +550,14 @@ class OverlayWindow(QWidget):
         self.msg_label = QLabel("SCREEN REST")
         self.msg_label.setStyleSheet(f"color: #888888; font-size: 48px; font-weight: bold; background: transparent; border: none; {retro_font} letter-spacing: 2px;")
         self.msg_label.setAlignment(Qt.AlignCenter)
-        self.msg_label.setFixedWidth(850)
+        self.msg_label.setFixedWidth(1000)
         
         self.timer_label = QLabel("00:00")
         self.timer_label.setStyleSheet(f"color: #AAAAAA; font-size: 32px; font-weight: normal; margin-top: 30px; border: none; background: transparent; {retro_font}")
         self.timer_label.setAlignment(Qt.AlignCenter)
         
         self.progress = QProgressBar()
-        self.progress.setFixedWidth(600)
+        self.progress.setFixedWidth(598)
         self.progress.setFixedHeight(20)
         self.progress.setTextVisible(False)
         self.progress.setStyleSheet("""
@@ -558,10 +565,10 @@ class OverlayWindow(QWidget):
             QProgressBar::chunk { background-color: #AAAAAA; width: 15px; margin: 2px; }
         """)
         
-        l_break.addWidget(self.msg_label)
-        l_break.addWidget(self.timer_label)
+        l_break.addWidget(self.msg_label, 0, Qt.AlignCenter)
+        l_break.addWidget(self.timer_label, 0, Qt.AlignCenter)
         l_break.addSpacing(60)
-        l_break.addWidget(self.progress)
+        l_break.addWidget(self.progress, 0, Qt.AlignCenter)
         
         # Add pages to stack
         self.stack.addWidget(self.page_checkin)
@@ -601,6 +608,17 @@ class OverlayWindow(QWidget):
     def set_message(self, text):
         # Override for custom messages if needed
         self.msg_label.setText(text.upper())
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_F4 and (event.modifiers() & Qt.AltModifier):
+            self.close()
+        else:
+            super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        # When window closes (via Alt+F4), tell Main Window to stop
+        self.action_cancelled.emit()
+        event.accept()
 
 
 # --- Sound Engine ---
@@ -647,7 +665,8 @@ class SoundEngine:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Lumina Focus")
+        self.current_version = "2.0.2"
+        self.setWindowTitle("Ikiflow")
         self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -681,6 +700,18 @@ class MainWindow(QMainWindow):
         # Setup UI and Tray
         self.init_ui()
         self.setup_tray()
+
+        # Inside MainWindow __init__
+        self.overlay = OverlayWindow()
+        
+        self.overlay.action_break.connect(self.start_actual_break)
+        self.overlay.action_extend.connect(lambda: self.extend_session(5))
+        
+        # --- ADD THIS CONNECTION ---
+        self.overlay.action_cancelled.connect(self.stop_timer)
+        # ---------------------------
+
+        QTimer.singleShot(2000, self.check_for_updates)
 
     # ---------- New Function ----------
 
@@ -721,7 +752,7 @@ class MainWindow(QMainWindow):
         
         # Header
         header_layout = QHBoxLayout()
-        title = QLabel("Lumina Focus")
+        title = QLabel("Ikiflow")
         title.setObjectName("Title")
         
         # Use custom ModernWindowButton
@@ -791,7 +822,7 @@ class MainWindow(QMainWindow):
 
     def hide_to_tray(self):
         self.hide()
-        self.tray_icon.showMessage("Lumina Focus", "Running in background.", QSystemTrayIcon.Information, 2000)
+        self.tray_icon.showMessage("Ikiflow", "Running in background.", QSystemTrayIcon.Information, 2000)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1001,6 +1032,54 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(0)
         self.action_pause.setEnabled(False)
         self.action_pause.setText("Pause Timer")
+
+    # ---------- New Functions ----------
+
+    def check_for_updates(self):
+        print("Checking for updates...")
+        self.nam = QNetworkAccessManager(self)
+        self.nam.finished.connect(self.handle_update_response)
+        
+        # PASTE YOUR RAW GITHUB URL HERE
+        url_str = "https://raw.githubusercontent.com/designswithharshit/Ikiflow/refs/heads/main/Version.txt"
+        self.nam.get(QNetworkRequest(QUrl(url_str)))
+
+    def handle_update_response(self, reply):
+        if reply.error() == QNetworkReply.NoError:
+            # Get version from GitHub
+            remote_version = reply.readAll().data().decode('utf-8').strip()
+            
+            # Compare strings (Simple check: is it different?)
+            if remote_version != self.current_version:
+                self.show_update_dialog(remote_version)
+        
+        reply.deleteLater()
+
+    def show_update_dialog(self, new_ver):
+        # Create a modern dark-theme message box
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Update Available")
+        msg.setText(f"<b>A new version ({new_ver}) is available!</b>")
+        msg.setInformativeText("Would you like to download it now?")
+        msg.setIcon(QMessageBox.Information)
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.Yes)
+        
+        # Style the popup to match your app
+        msg.setStyleSheet("""
+            QMessageBox { background-color: #FFFFFF; }
+            QLabel { color: #2D3436; font-size: 14px; }
+            QPushButton { 
+                background-color: #0984E3; color: white; 
+                padding: 5px 15px; border-radius: 5px; font-weight: bold; 
+            }
+            QPushButton:hover { background-color: #74B9FF; }
+        """)
+        
+        if msg.exec() == QMessageBox.Yes:
+            # Open your GitHub Releases page
+            release_url = "https://raw.githubusercontent.com/designswithharshit/Ikiflow/releases/latest"
+            QDesktopServices.openUrl(QUrl(release_url))
 
     def tick(self):
         self.time_left -= 1
