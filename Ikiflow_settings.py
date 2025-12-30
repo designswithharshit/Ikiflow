@@ -156,6 +156,7 @@ class SettingsTab(QWidget):
     widget_style_updated = Signal(int, int, str)
     widget_props_updated = Signal(int, int) 
     overlay_text_updated = Signal(str)
+    feedback_clicked = Signal()
     
     preferences = {
         "minimize_to_tray": True,
@@ -306,6 +307,21 @@ class SettingsTab(QWidget):
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
 
+        # --- CARD 4: HELP & FEEDBACK ---
+        card_help = SettingCard("Support")
+        
+        btn_feedback = QPushButton("Send Feedback / Report Bug")
+        btn_feedback.setCursor(Qt.PointingHandCursor)
+        btn_feedback.setStyleSheet("""
+            QPushButton { background-color: #0984E3; color: white; border-radius: 6px; padding: 10px; font-weight: bold; border: none;}
+            QPushButton:hover { background-color: #74B9FF; }
+        """)
+        # Emit signal when clicked
+        btn_feedback.clicked.connect(self.feedback_clicked.emit)
+        
+        card_help.add_widget(btn_feedback)
+        content_layout.addWidget(card_help)
+
     def update_pref(self, key, value):
         self.preferences[key] = value
 
@@ -328,3 +344,5 @@ class SettingsTab(QWidget):
         text = self.input_msg.text()
         if not text: text = "SCREEN REST"
         self.overlay_text_updated.emit(text)
+
+        

@@ -17,6 +17,7 @@ from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRe
 from PySide6.QtWidgets import QMessageBox # Add QMessageBox to widgets list
 
 # IMPORT THE SETTINGS FILE
+from Ikiflow_feedback import FeedbackDialog
 from Ikiflow_settings import SettingsTab
 
 def resource_path(relative_path):
@@ -832,6 +833,10 @@ class MainWindow(QMainWindow):
         if self.dragging: self.move(event.globalPosition().toPoint() - self.offset)
     def mouseReleaseEvent(self, event): self.dragging = False
 
+    def open_feedback_dialog(self):
+        dlg = FeedbackDialog(self)
+        dlg.exec()
+
     def create_setup_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -846,6 +851,7 @@ class MainWindow(QMainWindow):
         self.settings_tab.widget_props_updated.connect(self.floater.apply_settings)
         self.settings_tab.preview_toggled.connect(self.toggle_preview)
         self.settings_tab.overlay_text_updated.connect(self.overlay.set_message)
+        self.settings_tab.feedback_clicked.connect(self.open_feedback_dialog)
         
         self.tabs.addTab(self.settings_tab, "Settings")
         
