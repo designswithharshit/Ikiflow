@@ -1084,7 +1084,7 @@ class MainWindow(QMainWindow):
         
         if msg.exec() == QMessageBox.Yes:
             # Open your GitHub Releases page
-            release_url = "https://raw.githubusercontent.com/designswithharshit/Ikiflow/releases/Download/v2.0.2/Ikiflow.exe"
+            release_url = "https://raw.githubusercontent.com/designswithharshit/Ikiflow/releases/Download/v2.1.2/Ikiflow.exe"
             QDesktopServices.openUrl(QUrl(release_url))
 
     def tick(self):
