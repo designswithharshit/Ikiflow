@@ -666,7 +666,7 @@ class SoundEngine:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.0.2"
+        self.current_version = "2.1.2"
         self.setWindowTitle("Ikiflow")
         self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
         self.setWindowFlags(Qt.FramelessWindowHint)
