@@ -1016,6 +1016,13 @@ class MainWindow(QMainWindow):
 
     def start_actual_break(self):
         self.is_break = True
+
+        # --- NEW: Stop Music & Reset Button ---
+        self.sound_engine.stop()
+        self.btn_ambient.setChecked(False)
+        self.btn_ambient.setText("Turn On Noise")
+        # --------------------------------------
+
         mins = self.input_break.value()
         self.total_time = mins * 60
         self.time_left = self.total_time
