@@ -25,7 +25,7 @@ from Ikiflow_analytics import AnalyticsTab
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.1.2"
+        self.current_version = "2.2.2"
         self.setWindowTitle("Ikiflow")
         try:
             self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.overlay.action_cancelled.connect(self.stop_timer)
         # ---------------------------
 
-        # QTimer.singleShot(2000, self.check_for_updates)
+        QTimer.singleShot(2000, self.check_for_updates)
 
     # ---------- New Function ----------
 
@@ -527,7 +527,7 @@ class MainWindow(QMainWindow):
         
         if msg.exec() == QMessageBox.Yes:
             # Open your GitHub Releases page
-            release_url = "https://github.com/designswithharshit/Ikiflow/releases/download/v2.1.2/Ikiflow.exe"
+            release_url = f"https://github.com/designswithharshit/Ikiflow/releases/download/v{new_ver}/Ikiflow.exe"
             QDesktopServices.openUrl(QUrl(release_url))
 
     def tick(self):
