@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PySide6.QtCore import Qt, QTimer, QUrl, QPoint
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QColor, QPainter, QAction
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PySide6.QtCore import QSettings, QTimer
 
 # --- YOUR CUSTOM MODULES ---
 from Ikiflow_utils import resource_path
@@ -16,7 +17,8 @@ from Ikiflow_components import (ModernWindowButton, CircularTimeInput,
                                 CustomLinearInput, FloatingWidget, OverlayWindow)
 from Ikiflow_settings import SettingsTab
 from Ikiflow_feedback import FeedbackDialog
-
+from Ikiflow_data import HistoryManager, get_active_window_title
+from Ikiflow_analytics import AnalyticsTab
         
 # --- 5. MAIN WINDOW ---
 
@@ -25,7 +27,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.current_version = "2.1.2"
         self.setWindowTitle("Ikiflow")
-        self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
+        try:
+            self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
+        except Exception as e:
+            print(f"Warning: Could not load icon: {e}")
+        # Temporarily remove frameless hint to test
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.resize(400, 550)
@@ -45,18 +51,32 @@ class MainWindow(QMainWindow):
         self.floater = FloatingWidget()
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
+        self.history_manager = HistoryManager()
+
+        # --- NEW: App Tracking Setup ---
+        self.session_app_data = {}  # Stores {"App Name": seconds_used}
+        self.tracker_timer = QTimer()
+        # self.tracker_timer.timeout.connect(self.track_current_app)
+        # -------------------------------
+
+        self.session_start_time = None
+        self.detected_app = "None"
 
         # --- NEW: Init Sound Engine ---
         self.sound_engine = SoundEngine()
-        self.sound_engine.load_sound("noise.wav") # Make sure you have this file!
+        try:
+            self.sound_engine.load_sound("noise.wav") # Make sure you have this file!
+            print("Sound loaded successfully")
+        except Exception as e:
+            print(f"Warning: Could not load sound file: {e}")
         self.is_ambient_on = False
+        
+        # Inside MainWindow __init__
+        self.overlay = OverlayWindow()
         
         # Setup UI and Tray
         self.init_ui()
         self.setup_tray()
-
-        # Inside MainWindow __init__
-        self.overlay = OverlayWindow()
         
         self.overlay.action_break.connect(self.start_actual_break)
         self.overlay.action_extend.connect(lambda: self.extend_session(5))
@@ -65,7 +85,7 @@ class MainWindow(QMainWindow):
         self.overlay.action_cancelled.connect(self.stop_timer)
         # ---------------------------
 
-        QTimer.singleShot(2000, self.check_for_updates)
+        # QTimer.singleShot(2000, self.check_for_updates)
 
     # ---------- New Function ----------
 
@@ -196,18 +216,27 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0,0,0,0)
         
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.create_timer_tab(), "Timer")
         
-        # --- NEW SETTINGS TAB INSTANCE ---
+        # 1. Create the Settings Tab Instance FIRST
         self.settings_tab = SettingsTab()
+        
+        # 2. Connect Signals (Feed back to floating widget, overlay, etc.)
         self.settings_tab.widget_style_updated.connect(self.floater.update_config)
         self.settings_tab.widget_props_updated.connect(self.floater.apply_settings)
         self.settings_tab.preview_toggled.connect(self.toggle_preview)
         self.settings_tab.overlay_text_updated.connect(self.overlay.set_message)
         self.settings_tab.feedback_clicked.connect(self.open_feedback_dialog)
         
+        # 3. NOW Add Tabs to the widget
+        self.tabs.addTab(self.create_timer_tab(), "Timer")
+        
+        # Only add this if you are using the analytics file we discussed
+        # from Ikiflow_analytics import AnalyticsTab (Ensure this is imported at top)
+        self.tabs.addTab(AnalyticsTab(), "Analyzer") 
+        
         self.tabs.addTab(self.settings_tab, "Settings")
         
+        # 4. Finish Layout
         self.btn_start = QPushButton("Start Focus Session")
         self.btn_start.setObjectName("ActionBtn")
         self.btn_start.clicked.connect(self.start_timer)
@@ -319,6 +348,35 @@ class MainWindow(QMainWindow):
             self.floater.show()
             self.settings_tab.emit_design_update() # Sync current design
 
+    # --- Tracking Function ---
+
+    def track_current_app(self):
+        # 1. Get Title
+        title = get_active_window_title()
+        
+        # 2. Smart Grouping & Renaming
+        if "Ikiflow" in title:
+            app_name = "Focus Timer"
+        elif " - " in title:
+            app_name = title.split(" - ")[-1]
+        elif " | " in title:
+            app_name = title.split(" | ")[-1]
+        else:
+            app_name = title
+            
+        # Clean specific messy names
+        if "WhatsApp" in title: app_name = "WhatsApp"
+        if "Pinterest" in title: app_name = "Pinterest"
+        if "Edge" in title: app_name = "Microsoft Edge"
+        if "Chrome" in title: app_name = "Google Chrome"
+
+        # 3. THE FIX: Just add exactly 1 second
+        # Since this function is called once per tick, we add 1.
+        if app_name in self.session_app_data:
+            self.session_app_data[app_name] += 1
+        else:
+            self.session_app_data[app_name] = 1
+        
     # --- Toggle_ambient ---
 
     def toggle_ambient(self):
@@ -331,6 +389,12 @@ class MainWindow(QMainWindow):
 
     def start_timer(self):
         if self.is_running: return
+
+        # --- NEW: Start Tracking ---
+        self.session_app_data = {}  # Reset data
+        # self.tracker_timer.start(5000) # Check every 5 seconds
+        # ---------------------------
+
         self.is_running = True
         self.is_paused = False
         self.is_break = False
@@ -388,6 +452,25 @@ class MainWindow(QMainWindow):
         self.timer.start(1000)
 
     def stop_timer(self):
+
+        # --- NEW: Stop Tracking ---
+        # self.tracker_timer.stop()
+
+        if self.is_running and not self.is_break:
+            elapsed_seconds = self.total_time - self.time_left
+            actual_mins = elapsed_seconds // 60
+            planned_mins = self.total_time // 60
+
+            if actual_mins >= 1:
+                self.history_manager.save_session(
+                    duration_planned=planned_mins,
+                    duration_actual=actual_mins,
+                    break_duration=self.input_break.value(),
+                    status="Skipped",
+                    app_data=self.session_app_data  # <--- PASS DATA HERE
+                )
+    # ---------------------------
+
         self.timer.stop()
         self.is_running = False
         self.is_paused = False
@@ -444,29 +527,74 @@ class MainWindow(QMainWindow):
         
         if msg.exec() == QMessageBox.Yes:
             # Open your GitHub Releases page
-            release_url = "https://raw.githubusercontent.com/designswithharshit/Ikiflow/releases/Download/v2.1.2/Ikiflow.exe"
+            release_url = "https://github.com/designswithharshit/Ikiflow/releases/download/v2.1.2/Ikiflow.exe"
             QDesktopServices.openUrl(QUrl(release_url))
 
     def tick(self):
         self.time_left -= 1
         self.update_display()
 
+        # 2. THE FIX: Record exactly 1 second of data right now
+        if not self.is_break and self.time_left > 0:
+            self.track_current_app()
+
         if self.is_break:
             # Break Logic
             self.overlay.update_state(self.time_left, self.total_time)
-            if self.time_left <= 0: self.stop_timer()
+            
+            # FIX 2: Auto-End Break -> Start Focus (Loop)
+            if self.time_left <= 0:
+                self.is_break = False
+                self.overlay.hide()
+                
+                # Reset Focus Timer
+                mins = self.input_focus.value()
+                self.total_time = mins * 60
+                self.time_left = self.total_time
+                
+                # Update Status
+                self.lbl_status.setText("Focus Mode Active")
+                self.lbl_status.setStyleSheet("color: #636E72; font-size: 16px; font-weight: 600; background: transparent; border: none;")
+                
+                # Show Floater
+                self.floater.show()
+                
+                # Restart Sound if "Noise On" was active
+                if self.btn_ambient.isChecked():
+                     self.sound_engine.play()
+
         else:
             # Focus Logic
             pct = 0
-            if self.total_time > 0: pct = int(((self.total_time - self.time_left) / self.total_time) * 100)
+            if self.total_time > 0: 
+                pct = int(((self.total_time - self.time_left) / self.total_time) * 100)
+            
             self.floater.time_lbl.setText(self.format_time(self.time_left))
             self.floater.bar.setValue(100 - pct)
             
-            # --- LOOP LOGIC: Show Check-In Overlay ---
-            if self.time_left <= 0: 
+            # End of Focus -> Show Check-In
+            if self.time_left <= 0:
+
+                # --- NEW: Stop Tracker & Save ---
+                self.tracker_timer.stop()
+
+                planned_mins = self.input_focus.value()
+                self.history_manager.save_session(
+                    duration_planned=planned_mins,
+                    duration_actual=planned_mins,
+                    break_duration=self.input_break.value(),
+                    status="Completed",
+                    app_data=self.session_app_data  # <--- PASS DATA HERE
+                )
+                # --------------------------------
+
                 self.timer.stop() 
                 self.floater.hide()
                 self.overlay.show_checkin()
+                # Stop noise during check-in
+                self.sound_engine.stop()
+
+    
 
     def extend_session(self, minutes):
         self.overlay.hide()
@@ -475,6 +603,12 @@ class MainWindow(QMainWindow):
         # Add time
         self.time_left += (minutes * 60)
         self.total_time += (minutes * 60)
+
+        # FIX 1: Force show normal before starting to ensure it's not minimized
+        self.floater.setWindowState(Qt.WindowNoState)
+        self.floater.show()
+        self.floater.raise_()
+        self.floater.activateWindow()
 
         self.timer.start(1000)
         self.floater.show()
@@ -488,6 +622,12 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    
+    # --- IMPORTANT: This allows QSettings to work globally ---
+    app.setOrganizationName("DesignWithHarshit")
+    app.setApplicationName("Ikiflow")
+    # ---------------------------------------------------------
+    
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(STYLESHEET)
     window = MainWindow()

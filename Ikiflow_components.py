@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (QWidget, QPushButton, QLabel, QProgressBar,
 from PySide6.QtCore import Qt, QPoint, QRectF, QTimer, Signal, QSize
 from PySide6.QtGui import QColor, QPainter, QPen, QFont
 from Ikiflow_utils import resource_path
+from PySide6.QtCore import QSettings  # Add QSettings to your list of imports
 
 # ... Paste ModernWindowButton class here ...
 # ... Paste CircularTimeInput class here ...
@@ -182,7 +183,10 @@ class CustomLinearInput(QWidget):
 
     def mouseMoveEvent(self, e):
         if self.dragging: self.snap_to_x(e.position().x())
-    def mouseReleaseEvent(self, e): self.dragging = False
+    def mouseReleaseEvent(self, e):
+        self.dragging = False
+        # --- NEW: Save Position ---
+        self.settings.setValue("pos", self.pos())
 
     def snap_to_x(self, x):
         padding = 20
@@ -226,6 +230,11 @@ class CustomLinearInput(QWidget):
 class FloatingWidget(QWidget):
     def __init__(self):
         super().__init__()
+
+        self.settings = QSettings() # No arguments needed now!
+        saved_pos = self.settings.value("widget_pos")
+        if saved_pos:
+            self.move(saved_pos)
 
         self.setWindowFlags(
             Qt.FramelessWindowHint |
@@ -277,6 +286,12 @@ class FloatingWidget(QWidget):
         self.setGraphicsEffect(self.opacity_effect)
 
         self.apply_style()
+
+        # --- NEW: Load Saved Position ---
+        self.settings = QSettings("Ikiflow", "FloatingWidget")
+        saved_pos = self.settings.value("pos")
+        if saved_pos:
+            self.move(saved_pos)
 
     # ---------- STYLE ----------
     def apply_style(self):
@@ -400,6 +415,7 @@ class FloatingWidget(QWidget):
 
     def mouseReleaseEvent(self, e):
         self.dragging = False
+        self.settings.setValue("widget_pos", self.pos())
 
     def resizeEvent(self, e):
         self.apply_style()

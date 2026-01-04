@@ -1,0 +1,95 @@
+[
+    {
+        "timestamp": "2026-01-04T17:35:08.345451",
+        "date": "2026-01-04",
+        "focus_planned": 5,
+        "focus_actual": 5,
+        "break_selected": 1,
+        "status": "Completed",
+        "primary_app": "Ikiflow"
+    },
+    {
+        "timestamp": "2026-01-04T17:52:27.979131",
+        "date": "2026-01-04",
+        "focus_planned": 2,
+        "focus_actual": 2,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Ikiflow": 30,
+            "Google Gemini": 5,
+            "Visual Studio Code": 15,
+            "Microsoft\u200b Edge": 10,
+            "Google Chrome": 25,
+            "Home": 5,
+            "Manage Hub": 30
+        }
+    },
+    {
+        "timestamp": "2026-01-04T18:02:19.612716",
+        "date": "2026-01-04",
+        "focus_planned": 1,
+        "focus_actual": 1,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Ikiflow": 60
+        }
+    },
+    {
+        "timestamp": "2026-01-04T18:23:04.922239",
+        "date": "2026-01-04",
+        "focus_planned": 10,
+        "focus_actual": 10,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Unknown": 10,
+            "WhatsApp": 10,
+            "India": 5,
+            "Pinterest": 155,
+            "Pin on diy ideas creative": 15,
+            "Pin on K\u0131l\u0131flar Nak\u0131\u015f": 65,
+            "\u3164\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \ud83d\udcd2\u1a59\u1ab6 *\u23d1 \u3145 \u23d1* \u15dd \u2768 \u0361 \u0361 \u2769 \u3164\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \u3164 ..\u00a0\u00a0\u00a0 ` ...`": 95,
+            "Pin on Crochet \ud83d\udc95": 45,
+            "i WANTTT": 20,
+            "Crochet Makeup Case": 90,
+            "Pin on crochet": 25,
+            "Pin on ideas para tejer": 5
+        }
+    },
+    {
+        "timestamp": "2026-01-04T18:38:39.912664",
+        "date": "2026-01-04",
+        "focus_planned": 1,
+        "focus_actual": 1,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Visual Studio Code": 5,
+            "Microsoft\u200b Edge": 10,
+            "Unknown": 15,
+            "India": 5,
+            "(8) Pinterest": 5
+        }
+    },
+    {
+        "timestamp": "2026-01-04T18:56:20.699173",
+        "date": "2026-01-04",
+        "focus_planned": 5,
+        "focus_actual": 5,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Focus Timer": 7,
+            "Google Gemini": 4,
+            "Visual Studio Code": 6,
+            "Unknown": 11,
+            "Pinterest": 110,
+            "WhatsApp": 70,
+            "YouTube": 41,
+            "(27) YouTube": 15,
+            "CONNECT": 35
+        }
+    }
+]

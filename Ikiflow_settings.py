@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QFrame, QGraphicsDropShadowEffect, QScrollBar)
 from PySide6.QtCore import Qt, Signal, QRectF, QPoint, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QColor, QPainter, QPen, QFont, QCursor
+from PySide6.QtCore import QSettings, QTimer
 
 # --- 1. MODERN TOGGLE SWITCH ---
 class ToggleSwitch(QCheckBox):
@@ -167,6 +168,7 @@ class SettingsTab(QWidget):
     def __init__(self):
         super().__init__()
         self.init_ui()
+        self.load_settings()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -326,8 +328,17 @@ class SettingsTab(QWidget):
         self.preferences[key] = value
 
     def emit_design_update(self):
+        settings = QSettings()
+
         sel_btn = self.color_group.checkedButton()
         color = sel_btn.color if sel_btn else "#0984E3"
+
+        # --- SAVE ---
+        settings.setValue("style_idx", self.combo_style.currentIndex())
+        settings.setValue("radius", self.slider_round.value())
+        settings.setValue("theme_color", color)
+        # ------------
+
         self.widget_style_updated.emit(
             self.combo_style.currentIndex(),
             self.slider_round.value(),
@@ -335,6 +346,13 @@ class SettingsTab(QWidget):
         )
 
     def emit_props_update(self):
+        settings = QSettings()
+
+        # --- SAVE ---
+        settings.setValue("scale", self.slider_scale.value())
+        settings.setValue("opacity", self.slider_op.value())
+        # ------------
+
         self.widget_props_updated.emit(
             self.slider_scale.value(),
             self.slider_op.value()
@@ -345,4 +363,35 @@ class SettingsTab(QWidget):
         if not text: text = "SCREEN REST"
         self.overlay_text_updated.emit(text)
 
-        
+    def load_settings(self):
+        settings = QSettings()
+
+        # Load values (with defaults if first run)
+        style_idx = int(settings.value("style_idx", 0))
+        radius = int(settings.value("radius", 50))
+        scale = int(settings.value("scale", 100))
+        opacity = int(settings.value("opacity", 100))
+        color = settings.value("theme_color", "#0984E3")
+
+        # Apply to UI Components
+        self.combo_style.setCurrentIndex(style_idx)
+        self.slider_round.val = radius  # Update slider internal value
+        self.slider_scale.val = scale
+        self.slider_op.val = opacity
+
+        # Find and check the correct color button
+        for btn in self.color_group.buttons():
+            if btn.color == color:
+                btn.setChecked(True)
+                break
+
+        # Force the UI to repaint the sliders
+        self.slider_round.update()
+        self.slider_scale.update()
+        self.slider_op.update()
+
+        # Trigger updates so the Floating Widget sees these loaded values immediately
+        QTimer.singleShot(100, self.emit_design_update)
+        QTimer.singleShot(100, self.emit_props_update)
+
+            
