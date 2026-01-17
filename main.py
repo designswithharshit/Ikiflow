@@ -1,13 +1,15 @@
 import sys
 import os
+import math
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QLabel, QPushButton, QFrame, 
                                QGraphicsDropShadowEffect, QStackedWidget, 
                                QSystemTrayIcon, QMenu, QFileDialog, QMessageBox, QTabWidget)
 from PySide6.QtCore import Qt, QTimer, QUrl, QPoint
-from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QColor, QPainter, QAction
+from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QColor, QPainter, QAction, QPen
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 # --- YOUR CUSTOM MODULES ---
 from Ikiflow_utils import resource_path
@@ -18,14 +20,14 @@ from Ikiflow_components import (ModernWindowButton, CircularTimeInput,
 from Ikiflow_settings import SettingsTab
 from Ikiflow_feedback import FeedbackDialog
 from Ikiflow_data import HistoryManager, get_active_window_title
-from Ikiflow_analytics import AnalyticsTab
-        
+from Ikiflow_analyzer import AnalyzerWindow
+
 # --- 5. MAIN WINDOW ---
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.2.2"
+        self.current_version = "2.3.2"
         self.setWindowTitle("Ikiflow")
         try:
             self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
@@ -216,35 +218,54 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0,0,0,0)
         
         self.tabs = QTabWidget()
-        
-        # 1. Create the Settings Tab Instance FIRST
         self.settings_tab = SettingsTab()
         
-        # 2. Connect Signals (Feed back to floating widget, overlay, etc.)
+        # ... (Connect your settings signals here as before) ...
         self.settings_tab.widget_style_updated.connect(self.floater.update_config)
         self.settings_tab.widget_props_updated.connect(self.floater.apply_settings)
         self.settings_tab.preview_toggled.connect(self.toggle_preview)
         self.settings_tab.overlay_text_updated.connect(self.overlay.set_message)
         self.settings_tab.feedback_clicked.connect(self.open_feedback_dialog)
         
-        # 3. NOW Add Tabs to the widget
+        # ONLY TWO TABS NOW (Distraction Free)
         self.tabs.addTab(self.create_timer_tab(), "Timer")
-        
-        # Only add this if you are using the analytics file we discussed
-        # from Ikiflow_analytics import AnalyticsTab (Ensure this is imported at top)
-        self.tabs.addTab(AnalyticsTab(), "Analyzer") 
-        
         self.tabs.addTab(self.settings_tab, "Settings")
         
-        # 4. Finish Layout
+        # --- ACTION BUTTONS ---
+        action_layout = QHBoxLayout()
+        
+        # 1. Analyzer Button (Small Notebook Icon)
+        btn_analyze = QPushButton("📊") # Or use an icon
+        btn_analyze.setFixedSize(50, 50)
+        btn_analyze.setToolTip("Open Reflection Journal")
+        btn_analyze.setCursor(Qt.PointingHandCursor)
+        btn_analyze.setStyleSheet("""
+            QPushButton { background: #F1F2F6; border-radius: 12px; font-size: 20px; border: none; }
+            QPushButton:hover { background: #DFE6E9; }
+        """)
+        btn_analyze.clicked.connect(self.open_analyzer)
+        
+        # 2. Start Button (Big)
         self.btn_start = QPushButton("Start Focus Session")
         self.btn_start.setObjectName("ActionBtn")
         self.btn_start.clicked.connect(self.start_timer)
         self.btn_start.setCursor(Qt.PointingHandCursor)
+        
+        action_layout.addWidget(btn_analyze)
+        action_layout.addSpacing(10)
+        action_layout.addWidget(self.btn_start, 1) # 1 = Stretch
 
         layout.addWidget(self.tabs)
-        layout.addWidget(self.btn_start)
+        layout.addLayout(action_layout) # Add the layout, not just the button
         return page
+
+    def open_analyzer(self):
+        # Create it if it doesn't exist, or just show it
+        if not hasattr(self, 'analyzer_window') or self.analyzer_window is None:
+            self.analyzer_window = AnalyzerWindow()
+        
+        self.analyzer_window.show()
+        self.analyzer_window.activateWindow()
 
     def create_active_page(self):
         page = QWidget()
@@ -354,24 +375,42 @@ class MainWindow(QMainWindow):
         # 1. Get Title
         title = get_active_window_title()
         
-        # 2. Smart Grouping & Renaming
-        if "Ikiflow" in title:
-            app_name = "Focus Timer"
-        elif " - " in title:
-            app_name = title.split(" - ")[-1]
-        elif " | " in title:
-            app_name = title.split(" | ")[-1]
-        else:
-            app_name = title
-            
-        # Clean specific messy names
-        if "WhatsApp" in title: app_name = "WhatsApp"
-        if "Pinterest" in title: app_name = "Pinterest"
-        if "Edge" in title: app_name = "Microsoft Edge"
-        if "Chrome" in title: app_name = "Google Chrome"
+        # 2. Smart Renaming (Improved)
+        app_name = title
+        
+        # A. Priority: Check for known creative apps (The "Adobe" Fix)
+        # These apps often put the filename first, e.g. "Project.ai @ 50%... - Adobe Illustrator"
+        keywords = {
+            "Illustrator": "Adobe Illustrator",
+            "Photoshop": "Adobe Photoshop",
+            "Indesign": "Adobe InDesign",
+            "Premiere": "Adobe Premiere",
+            "After Effects": "Adobe After Effects",
+            "Canva": "Canva",
+            "Figma": "Figma",
+            "Notion": "Notion",
+            "Code": "Visual Studio Code",
+            "Chrome": "Google Chrome",
+            "Edge": "Microsoft Edge",
+            "Firefox": "Firefox",
+            "Ikiflow": "Focus Timer"
+        }
+        
+        found_keyword = False
+        for key, clean_name in keywords.items():
+            if key in title:
+                app_name = clean_name
+                found_keyword = True
+                break
+        
+        # B. Fallback: Clean mess if no keyword found
+        if not found_keyword:
+            if " - " in title:
+                app_name = title.split(" - ")[-1] # Take the end part
+            elif " | " in title:
+                app_name = title.split(" | ")[-1]
 
-        # 3. THE FIX: Just add exactly 1 second
-        # Since this function is called once per tick, we add 1.
+        # 3. Add exactly 1 second
         if app_name in self.session_app_data:
             self.session_app_data[app_name] += 1
         else:
@@ -432,13 +471,30 @@ class MainWindow(QMainWindow):
             self.lbl_status.setText("Session Paused")
 
     def start_actual_break(self):
-        self.is_break = True
+        # --- FIX: SAVE SESSION NOW ---
+        # Now we know the user is truly done, including any extensions.
+        planned_mins = self.input_focus.value() # Initial goal
+        
+        # Calculate actual time based on total accumulated time
+        elapsed_seconds = self.total_time  # Since time_left is 0, total_time is what we did
+        actual_mins = elapsed_seconds // 60
+        
+        # Capture final app usage state
+        self.track_current_app()
+        
+        self.history_manager.save_session(
+            duration_planned=planned_mins,
+            duration_actual=actual_mins,
+            break_duration=self.input_break.value(),
+            status="Completed",
+            app_data=self.session_app_data
+        )
+        # -----------------------------
 
-        # --- NEW: Stop Music & Reset Button ---
+        self.is_break = True
         self.sound_engine.stop()
         self.btn_ambient.setChecked(False)
         self.btn_ambient.setText("Turn On Noise")
-        # --------------------------------------
 
         mins = self.input_break.value()
         self.total_time = mins * 60
@@ -574,27 +630,22 @@ class MainWindow(QMainWindow):
             
             # End of Focus -> Show Check-In
             if self.time_left <= 0:
-
-                # --- NEW: Stop Tracker & Save ---
-                self.tracker_timer.stop()
-
-                planned_mins = self.input_focus.value()
-                self.history_manager.save_session(
-                    duration_planned=planned_mins,
-                    duration_actual=planned_mins,
-                    break_duration=self.input_break.value(),
-                    status="Completed",
-                    app_data=self.session_app_data  # <--- PASS DATA HERE
-                )
-                # --------------------------------
-
-                self.timer.stop() 
+                self.timer.stop()
+                
+                # --- FIX: DO NOT SAVE HERE ---
+                # We just show the check-in. We wait for the user to 
+                # click "Start Break" or "Stop" before saving.
+                # -----------------------------
+                
                 self.floater.hide()
                 self.overlay.show_checkin()
-                # Stop noise during check-in
                 self.sound_engine.stop()
-
-    
+                
+                # Bring window to front so they see the check-in
+                self.setWindowState(Qt.WindowNoState)
+                self.show()
+                self.raise_()
+                self.activateWindow()
 
     def extend_session(self, minutes):
         self.overlay.hide()
@@ -620,7 +671,32 @@ class MainWindow(QMainWindow):
         mins, secs = divmod(seconds, 60)
         return f"{mins:02d}:{secs:02d}"
 
+def check_single_instance():
+    """Check if another instance is already running and handle it appropriately."""
+    socket = QLocalSocket()
+    socket.connectToServer("Ikiflow_SingleInstance")
+    
+    if socket.waitForConnected(500):  # Wait 500ms for connection
+        # Another instance is running, bring it to front
+        socket.write(b"SHOW_WINDOW")
+        socket.flush()
+        socket.waitForBytesWritten(1000)
+        socket.disconnectFromServer()
+        return False  # Don't start a new instance
+    
+    # No other instance running, start the server
+    server = QLocalServer()
+    server.listen("Ikiflow_SingleInstance")
+    return True, server
+
 if __name__ == "__main__":
+    # Check for single instance
+    result = check_single_instance()
+    if not result:
+        sys.exit(0)  # Another instance is already running
+    
+    is_single_instance, local_server = result
+    
     app = QApplication(sys.argv)
     
     # --- IMPORTANT: This allows QSettings to work globally ---
@@ -630,6 +706,33 @@ if __name__ == "__main__":
     
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(STYLESHEET)
-    window = MainWindow()
-    window.show()
+    
+    window = None
+    
+    # Create and show main window
+    def show_main_window():
+        global window
+        window = MainWindow()
+        window.show()
+        window.raise_()
+        window.activateWindow()
+    
+    show_main_window()
+    
+    # Connect to the local server to handle show window requests
+    def handle_new_connection():
+        socket = local_server.nextPendingConnection()
+        if socket:
+            socket.readyRead.connect(lambda: handle_show_request(socket))
+    
+    def handle_show_request(socket):
+        data = socket.readAll().data().decode()
+        if data == "SHOW_WINDOW" and window is not None:
+            window.show()
+            window.raise_()
+            window.activateWindow()
+        socket.disconnectFromServer()
+    
+    local_server.newConnection.connect(handle_new_connection)
+    
     sys.exit(app.exec())
