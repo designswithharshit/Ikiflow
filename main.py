@@ -29,7 +29,7 @@ from Ikiflow_analyzer import AnalyzerWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.3.2"
+        self.current_version = "2.4.5"
         self.setWindowTitle("Ikiflow")
         try:
             self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
