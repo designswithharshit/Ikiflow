@@ -3276,5 +3276,16 @@
             "Special Calender 2026.pdf* @ 150 % (CMYK/Preview) ": 17,
             "Special Calender 2026.pdf @ 50 % (CMYK/Preview) ": 75
         }
+    },
+    {
+        "timestamp": "2026-01-18T02:01:26.159971",
+        "date": "2026-01-18",
+        "focus_planned": 1,
+        "focus_actual": 1,
+        "break_selected": 1,
+        "status": "Completed",
+        "app_usage": {
+            "Focus Timer": 60
+        }
     }
 ]

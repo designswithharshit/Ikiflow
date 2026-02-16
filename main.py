@@ -1,10 +1,11 @@
 import sys
 import os
 import math
+import time
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QLabel, QPushButton, QFrame, 
                                QGraphicsDropShadowEffect, QStackedWidget, 
-                               QSystemTrayIcon, QMenu, QFileDialog, QMessageBox, QTabWidget)
+                               QSystemTrayIcon, QMenu, QFileDialog, QMessageBox, QTabWidget, QDialog)
 from PySide6.QtCore import Qt, QTimer, QUrl, QPoint
 from PySide6.QtGui import QIcon, QPixmap, QDesktopServices, QColor, QPainter, QAction, QPen
 from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
@@ -15,12 +16,13 @@ from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from Ikiflow_utils import resource_path
 from Ikiflow_style import STYLESHEET
 from Ikiflow_audio import SoundEngine
-from Ikiflow_components import (ModernWindowButton, CircularTimeInput, 
-                                CustomLinearInput, FloatingWidget, OverlayWindow)
+from Ikiflow_components import (IntentDialog, ModernWindowButton, CircularTimeInput, 
+                                CustomLinearInput, FloatingWidget, OverlayWindow, QuickStartDialog)
 from Ikiflow_settings import SettingsTab
 from Ikiflow_feedback import FeedbackDialog
 from Ikiflow_data import HistoryManager, get_active_window_title
 from Ikiflow_analyzer import AnalyzerWindow
+
 
 # --- 5. MAIN WINDOW ---
 
@@ -47,6 +49,13 @@ class MainWindow(QMainWindow):
         self.time_left = 0
         self.is_break = False
         
+        # --- NEW: Cooldown Tracker ---
+        # Stores { "AppName": timestamp } to prevent spamming
+        self.app_cooldowns = {} 
+        # -----------------------------
+
+        self.overlay = OverlayWindow()
+
         # --- NEW CONNECTIONS ---
         # Moved to after setup_tray
         
@@ -75,6 +84,12 @@ class MainWindow(QMainWindow):
         
         # Inside MainWindow __init__
         self.overlay = OverlayWindow()
+
+        # --- NEW: Context Awareness ---
+        self.context_timer = QTimer(self)
+        self.context_timer.timeout.connect(self.monitor_context)
+        self.context_timer.start(3000) # Check every 3 seconds
+        self.last_triggered_app = None # Prevent spamming the popup
         
         # Setup UI and Tray
         self.init_ui()
@@ -88,8 +103,122 @@ class MainWindow(QMainWindow):
         # ---------------------------
 
         QTimer.singleShot(2000, self.check_for_updates)
+        
 
     # ---------- New Function ----------
+
+    # --- CONTEXT AWARENESS LOGIC (FIXED) ---
+
+    def monitor_context(self):
+        # 1. Safety Checks (Initialize if missing)
+        if not hasattr(self, 'app_cooldowns'): self.app_cooldowns = {}
+        if not hasattr(self, 'last_triggered_app'): self.last_triggered_app = None
+        
+        # 2. Don't interrupt if busy
+        if self.is_running or self.isVisible(): 
+            return
+
+        # 3. Get Title (Safe Get)
+        title = get_active_window_title()
+        if not title: return
+
+        # 4. Trigger List (Add your apps here)
+        triggers = [
+            "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
+            "After Effects", "Blender", "Figma", "Visual Studio Code", 
+            "PyCharm", "Unity", "Unreal Editor", "Notepad" 
+        ]
+        
+        detected = None
+        title_lower = title.lower()
+        
+        # Case-insensitive check
+        for t in triggers:
+            if t.lower() in title_lower:
+                detected = t # Keep original casing for display
+                break
+        
+        # 5. Smart Logic
+        if detected:
+            current_time = time.time()
+            last_ask = self.app_cooldowns.get(detected, 0)
+            
+            # Cooldown: If asked < 5 mins ago (300s), ignore
+            if (current_time - last_ask) < 300: 
+                return
+
+            # Trigger only if it's a DIFFERENT app than the last one triggered
+            # OR if the last one was None
+            if detected != self.last_triggered_app:
+                self.last_triggered_app = detected
+                self.trigger_quick_start(detected)
+
+    def trigger_quick_start(self, app_name):
+        # Stop monitor while dialog is open
+        self.context_timer.stop()
+        
+        try:
+            # 1. Set Cooldown IMMEDIATELY
+            self.app_cooldowns[app_name] = time.time()
+            
+            # 2. Show Dialog
+            dialog = QuickStartDialog(app_name, self)
+            if dialog.exec() == QDialog.Accepted:
+                action = dialog.result_action
+                
+                if action == "start":
+                    # Get values and start
+                    focus_min = dialog.slider.get_value()
+                    break_min = dialog.last_break
+                    self.input_focus.spin_box.setValue(focus_min)
+                    self.input_break.spin_box.setValue(break_min)
+                    
+                    # Direct start
+                    self.start_timer_direct(mode="Deep_Single", tasks=[f"Working in {app_name}"])
+                    
+                elif action == "start_custom": 
+                    # Open setup page
+                    self.showNormal()
+                    self.activateWindow()
+                    self.stack.setCurrentIndex(0)
+
+                elif action == "skip":
+                    pass 
+                    
+        except Exception as e:
+            print(f"Error in QuickStart: {e}")
+            
+        finally:
+            # 3. CRITICAL: Always restart monitoring, even if errors occur
+            self.context_timer.start(3000)
+
+    def start_timer_direct(self, mode, tasks):
+        """Used by Quick Start: Opens Main Window + Clean Widget"""
+        
+        # 1. Setup Widget (Text is hidden by the component update above)
+        self.floater.set_session_data(mode, tasks)
+        self.floater.show()
+        self.floater.setWindowState(Qt.WindowNoState)
+        self.floater.raise_()
+        
+        # 2. Setup Timer Engine
+        mins = self.input_focus.value()
+        self.total_time = mins * 60
+        self.time_left = self.total_time
+        
+        self.is_break = False
+        self.is_running = True
+        self.session_app_data = {} 
+        
+        # 3. OPEN MAIN WINDOW (The Interface you want)
+        self.stack.setCurrentIndex(1) # Switch stack to Active Timer View
+        self.showNormal()             # Make sure window is visible (not minimized)
+        self.activateWindow()         # Bring it to the front
+        
+        # 4. Go!
+        self.timer.start(1000)
+        self.update_display()
+        self.sound_engine.play_sound("start")
 
     def browse_noise_file(self):
         # Open File Dialog (WAV only for now to ensure compatibility)
@@ -374,43 +503,37 @@ class MainWindow(QMainWindow):
     def track_current_app(self):
         # 1. Get Title
         title = get_active_window_title()
-        
-        # 2. Smart Renaming (Improved)
         app_name = title
-        
-        # A. Priority: Check for known creative apps (The "Adobe" Fix)
-        # These apps often put the filename first, e.g. "Project.ai @ 50%... - Adobe Illustrator"
-        keywords = {
-            "Illustrator": "Adobe Illustrator",
-            "Photoshop": "Adobe Photoshop",
-            "Indesign": "Adobe InDesign",
-            "Premiere": "Adobe Premiere",
-            "After Effects": "Adobe After Effects",
-            "Canva": "Canva",
-            "Figma": "Figma",
-            "Notion": "Notion",
-            "Code": "Visual Studio Code",
-            "Chrome": "Google Chrome",
-            "Edge": "Microsoft Edge",
-            "Firefox": "Firefox",
-            "Ikiflow": "Focus Timer"
-        }
-        
-        found_keyword = False
-        for key, clean_name in keywords.items():
-            if key in title:
-                app_name = clean_name
-                found_keyword = True
-                break
-        
-        # B. Fallback: Clean mess if no keyword found
-        if not found_keyword:
-            if " - " in title:
-                app_name = title.split(" - ")[-1] # Take the end part
-            elif " | " in title:
-                app_name = title.split(" | ")[-1]
 
-        # 3. Add exactly 1 second
+        # --- SMART GROUPING LOGIC ---
+        # 1. Adobe Illustrator / Photoshop Files (e.g. "Logo.ai @ 50%...")
+        if any(x in title for x in [".ai @", "(RGB/Preview)", "(CMYK/Preview)", "Adobe Illustrator"]):
+            app_name = "Adobe Illustrator"
+        elif any(x in title for x in [".psd @", "(RGB/8)", "(CMYK/8)", "Adobe Photoshop"]):
+            app_name = "Adobe Photoshop"
+        # 2. Browsers (Clean up tabs)
+        elif " - Google Chrome" in title:
+            app_name = "Google Chrome"
+        elif " - Microsoft Edge" in title:
+            app_name = "Microsoft Edge"
+        # 3. Code Editors
+        elif "Visual Studio Code" in title:
+            app_name = "Visual Studio Code"
+        # 4. Filter your own app
+        elif "Ikiflow" in title:
+            app_name = "Focus Timer"
+        # 5. Fallback: Clean standard " - " suffixes
+        elif " - " in title:
+            # Check if the suffix looks like an app name (usually the last part)
+            parts = title.split(" - ")
+            if len(parts) > 1:
+                potential_app = parts[-1]
+                # Avoid splitting filenames that use hyphens
+                if len(potential_app) < 40: 
+                    app_name = potential_app
+
+        # --- RECORD DATA ---
+        # Add exactly 1 second
         if app_name in self.session_app_data:
             self.session_app_data[app_name] += 1
         else:
@@ -428,31 +551,33 @@ class MainWindow(QMainWindow):
 
     def start_timer(self):
         if self.is_running: return
-
-        # --- NEW: Start Tracking ---
-        self.session_app_data = {}  # Reset data
-        # self.tracker_timer.start(5000) # Check every 5 seconds
-        # ---------------------------
-
-        self.is_running = True
-        self.is_paused = False
-        self.is_break = False
         
+        # --- DIRECT START (No Intent Dialog) ---
+        
+        # 1. Get Duration directly from the inputs
         mins = self.input_focus.value()
         self.total_time = mins * 60
         self.time_left = self.total_time
         
-        self.stack.setCurrentIndex(1)
-        self.lbl_status.setText("Focus Mode Active")
-        self.lbl_status.setStyleSheet("color: #636E72; font-size: 16px; font-weight: 600; background: transparent; border: none;")
-        self.btn_pause.setText("Pause")
-        self.action_pause.setEnabled(True)
+        # 2. Reset State
+        self.is_break = False
+        self.is_running = True
+        self.session_app_data = {} 
         
+        # 3. Configure Floater (Default Mode)
+        # We set a generic task name since we skipped the input step
+        self.floater.set_session_data("Free", [])
         self.floater.show()
-        self.settings_tab.emit_design_update()
-        self.settings_tab.emit_props_update()
+        # We do NOT hide the main window anymore, per your request
+        # self.hide() 
+        
+        # 4. Switch Main Window to Active View (The 3rd screen)
+        self.stack.setCurrentIndex(1) 
+        
+        # 5. Start Engine
         self.timer.start(1000)
         self.update_display()
+        self.sound_engine.play_sound("start")
 
     def toggle_pause(self):
         if not self.is_running: return
@@ -524,6 +649,7 @@ class MainWindow(QMainWindow):
                     break_duration=self.input_break.value(),
                     status="Skipped",
                     app_data=self.session_app_data  # <--- PASS DATA HERE
+                    # FUTURE: You can pass self.floater.current_task here to save the Task Name too!
                 )
     # ---------------------------
 
@@ -708,6 +834,87 @@ if __name__ == "__main__":
     app.setStyleSheet(STYLESHEET)
     
     window = None
+    
+# --- CONTEXT AWARENESS LOGIC ---
+
+    def monitor_context(self):
+        # 1. Don't interrupt if already busy
+        if self.is_running or self.isVisible(): 
+            return
+
+        # 2. Get active window title
+        title = get_active_window_title()
+        
+        # 3. Define your trigger apps
+        # You can add "Notepad" or "Chrome" here to test it easily!
+        triggers = [
+            "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
+            "After Effects", "Blender", "Figma", "Visual Studio Code", 
+            "PyCharm", "Unity", "Unreal Editor", "Notepad" 
+        ]
+        
+        detected = None
+        for t in triggers:
+            if t in title:
+                detected = t
+                break
+        
+        # 4. Trigger Popup if new app detected
+        if detected and detected != self.last_triggered_app:
+            self.last_triggered_app = detected
+            self.trigger_quick_start(detected)
+            
+        # Reset if user leaves the app (allows re-triggering later)
+        if not detected:
+            self.last_triggered_app = None
+
+    def trigger_quick_start(self, app_name):
+        # Pause monitor so it doesn't fire multiple times
+        self.context_timer.stop()
+        
+        # Show the "Ghost Button" Dialog
+        dialog = QuickStartDialog(app_name, self)
+        if dialog.exec() == QDialog.Accepted:
+            action = dialog.result_action
+            
+            if action == "start":
+                # Instant 30-min Focus
+                self.input_focus.spin_box.setValue(30)
+                self.start_timer_direct(mode="Deep_Single", tasks=[f"Working in {app_name}"])
+                
+            elif action == "custom":
+                # Open main window
+                self.showNormal()
+                self.activateWindow()
+                self.stack.setCurrentIndex(0) # Go to setup tab
+                # Optional: Open intent dialog immediately
+                
+            elif action == "skip":
+                pass # They caught the ghost button!
+        
+        # Resume monitoring
+        self.context_timer.start(3000)
+
+    def start_timer_direct(self, mode, tasks):
+        """Bypasses the Intent Dialog for Quick Starts"""
+        self.floater.set_session_data(mode, tasks)
+        self.floater.show()
+        self.floater.setWindowState(Qt.WindowNoState)
+        self.floater.raise_()
+        self.floater.activateWindow()
+
+        mins = self.input_focus.value()
+        self.total_time = mins * 60
+        self.time_left = self.total_time
+        
+        self.is_break = False
+        self.is_running = True
+        self.session_app_data = {} 
+        
+        self.hide() 
+        self.timer.start(1000)
+        self.update_display()
+        self.sound_engine.play_sound("start")
     
     # Create and show main window
     def show_main_window():

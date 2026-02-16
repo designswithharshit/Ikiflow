@@ -1,19 +1,12 @@
 import math
 from PySide6.QtWidgets import (QWidget, QPushButton, QLabel, QProgressBar, 
                                QSpinBox, QVBoxLayout, QHBoxLayout, QFrame, 
-                               QGraphicsOpacityEffect, QStackedWidget, QApplication)
-from PySide6.QtCore import Qt, QPoint, QRectF, QTimer, Signal, QSize
-from PySide6.QtGui import QColor, QPainter, QPen, QFont
-from Ikiflow_utils import resource_path
-from PySide6.QtCore import QSettings  # Add QSettings to your list of imports
+                               QGraphicsOpacityEffect, QGraphicsDropShadowEffect, QStackedWidget, QApplication,
+                               QDialog, QLineEdit, QListWidget, QMenu)
+from PySide6.QtCore import (Qt, QPoint, QRectF, QTimer, Signal, QSize, QSettings, QPropertyAnimation, QEasingCurve)
+from PySide6.QtGui import (QColor, QPainter, QPen, QFont, QAction,)
 
-# ... Paste ModernWindowButton class here ...
-# ... Paste CircularTimeInput class here ...
-# ... Paste CustomLinearInput class here ...
-# ... Paste FloatingWidget class here ...
-# ... Paste OverlayWindow class here ...
-
-# --- 2. CUSTOM WIDGETS ---
+# --- 1. CUSTOM WINDOW BUTTON ---
 
 class ModernWindowButton(QPushButton):
     """Custom painted minimize/close button."""
@@ -45,6 +38,159 @@ class ModernWindowButton(QPushButton):
             painter.drawLine(20, 10, 10, 20)
         elif self.btn_type == "min":
             painter.drawLine(10, 15, 20, 15)
+
+# --- 2. INTENT DIALOG (NEW) ---
+
+class IntentDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.resize(400, 450)
+        self.selected_mode = "Deep_Single" # Default
+        self.final_intent = {} # Stores result
+        
+        # UI Setup
+        self.layout = QVBoxLayout(self)
+        self.card = QFrame()
+        self.card.setStyleSheet("""
+            QFrame { 
+                background: #FFFFFF; 
+                border-radius: 20px; 
+                border: 1px solid #E0E0E0;
+            }
+        """)
+        self.layout.addWidget(self.card)
+        
+        self.inner = QVBoxLayout(self.card)
+        self.inner.setContentsMargins(30, 30, 30, 30)
+        
+        # Header
+        lbl_title = QLabel("Set Your Intent")
+        lbl_title.setStyleSheet("font-size: 18px; font-weight: 800; color: #2D3436;")
+        self.inner.addWidget(lbl_title)
+        
+        # Mode Tabs
+        self.tabs = QHBoxLayout()
+        self.btn_single = self.create_tab_btn("Deep Focus", True)
+        self.btn_multi = self.create_tab_btn("Multi Task", False)
+        self.btn_free = self.create_tab_btn("Free Mode", False)
+        
+        self.tabs.addWidget(self.btn_single)
+        self.tabs.addWidget(self.btn_multi)
+        self.tabs.addWidget(self.btn_free)
+        self.inner.addLayout(self.tabs)
+        
+        # Content Stack
+        self.stack = QStackedWidget()
+        
+        # PAGE 1: Single Task
+        p1 = QWidget()
+        l1 = QVBoxLayout(p1)
+        self.inp_single = QLineEdit()
+        self.inp_single.setPlaceholderText("What is your anchor task?")
+        self.inp_single.setStyleSheet("QLineEdit { padding: 10px; border: 1px solid #E0E0E0; border-radius: 8px; background: #FAFAFA; color: #2D3436; }")
+        l1.addWidget(QLabel("ONE THING ONLY"))
+        l1.addWidget(self.inp_single)
+        l1.addStretch()
+        self.stack.addWidget(p1)
+        
+        # PAGE 2: Multi Task
+        p2 = QWidget()
+        l2 = QVBoxLayout(p2)
+        self.inp_multi = QLineEdit()
+        self.inp_multi.setPlaceholderText("Add a task + Press Enter")
+        self.inp_multi.setStyleSheet(self.inp_single.styleSheet())
+        self.inp_multi.returnPressed.connect(self.add_multi_task)
+        
+        self.list_multi = QListWidget()
+        self.list_multi.setStyleSheet("QListWidget { border: none; background: transparent; color: #2D3436; }")
+        
+        l2.addWidget(QLabel("STRUCTURED CHAOS"))
+        l2.addWidget(self.inp_multi)
+        l2.addWidget(self.list_multi)
+        self.stack.addWidget(p2)
+        
+        # PAGE 3: Free Mode
+        p3 = QWidget()
+        l3 = QVBoxLayout(p3)
+        lbl_free = QLabel("“I am not wasting time—\nI am watching it.”")
+        lbl_free.setStyleSheet("color: #636E72; font-style: italic; font-size: 14px;")
+        lbl_free.setAlignment(Qt.AlignCenter)
+        l3.addStretch()
+        l3.addWidget(lbl_free)
+        l3.addStretch()
+        self.stack.addWidget(p3)
+        
+        self.inner.addWidget(self.stack)
+        
+        # Begin Button
+        self.btn_begin = QPushButton("Begin Cycle")
+        self.btn_begin.setCursor(Qt.PointingHandCursor)
+        self.btn_begin.setStyleSheet("""
+            QPushButton { background: #2D3436; color: white; border-radius: 10px; padding: 12px; font-weight: bold; }
+            QPushButton:hover { background: #000000; }
+        """)
+        self.btn_begin.clicked.connect(self.accept_intent)
+        self.inner.addWidget(self.btn_begin)
+        
+        # Connections
+        self.btn_single.clicked.connect(lambda: self.set_mode("Deep_Single", 0))
+        self.btn_multi.clicked.connect(lambda: self.set_mode("Deep_Multi", 1))
+        self.btn_free.clicked.connect(lambda: self.set_mode("Free", 2))
+
+    def create_tab_btn(self, text, active):
+        btn = QPushButton(text)
+        btn.setCheckable(True)
+        btn.setChecked(active)
+        btn.setCursor(Qt.PointingHandCursor)
+        self.update_btn_style(btn)
+        return btn
+
+    def update_btn_style(self, btn):
+        if btn.isChecked():
+            btn.setStyleSheet("background: #0984E3; color: white; border: none; border-radius: 15px; padding: 5px 10px; font-size: 10px; font-weight: bold;")
+        else:
+            btn.setStyleSheet("background: #F1F2F6; color: #636E72; border: none; border-radius: 15px; padding: 5px 10px; font-size: 10px;")
+
+    def set_mode(self, mode, idx):
+        self.selected_mode = mode
+        self.stack.setCurrentIndex(idx)
+        
+        # Update buttons visually
+        for b in [self.btn_single, self.btn_multi, self.btn_free]: b.setChecked(False)
+        if idx == 0: self.btn_single.setChecked(True)
+        if idx == 1: self.btn_multi.setChecked(True)
+        if idx == 2: self.btn_free.setChecked(True)
+        
+        for b in [self.btn_single, self.btn_multi, self.btn_free]: self.update_btn_style(b)
+
+    def add_multi_task(self):
+        txt = self.inp_multi.text().strip()
+        if txt:
+            self.list_multi.addItem("• " + txt)
+            self.inp_multi.clear()
+
+    def accept_intent(self):
+        # Package data based on mode
+        self.final_intent = {"mode": self.selected_mode, "tasks": []}
+        
+        if self.selected_mode == "Deep_Single":
+            task = self.inp_single.text().strip()
+            if not task: task = "Deep Work" # Default
+            self.final_intent["tasks"] = [task]
+            
+        elif self.selected_mode == "Deep_Multi":
+            items = [self.list_multi.item(i).text().replace("• ", "") for i in range(self.list_multi.count())]
+            if not items: items = ["General Focus"]
+            self.final_intent["tasks"] = items
+            
+        elif self.selected_mode == "Free":
+            self.final_intent["tasks"] = ["Free Flow"]
+            
+        self.accept()
+
+# --- 3. CIRCULAR TIME INPUT ---
 
 class CircularTimeInput(QWidget):
     def __init__(self, presets, default_idx=3):
@@ -146,6 +292,7 @@ class CircularTimeInput(QWidget):
         painter.setFont(QFont("Segoe UI", 12))
         painter.drawText(QRectF(rect.x(), rect.y()+45, rect.width(), rect.height()), Qt.AlignCenter, "min")
 
+# --- 4. LINEAR INPUT ---
 
 class CustomLinearInput(QWidget):
     def __init__(self, presets, default_idx=2):
@@ -163,6 +310,8 @@ class CustomLinearInput(QWidget):
         self.spin_box.setStyleSheet("background: #F1F2F6; border-radius: 6px; font-weight: bold; font-size: 16px; color: #2D3436;")
         self.spin_box.resize(50, 35)
         self.spin_box.valueChanged.connect(self.on_spinbox_change)
+
+        self.settings = QSettings()
 
     def resizeEvent(self, event):
         self.spin_box.move(self.width() - 60, 0)
@@ -185,7 +334,6 @@ class CustomLinearInput(QWidget):
         if self.dragging: self.snap_to_x(e.position().x())
     def mouseReleaseEvent(self, e):
         self.dragging = False
-        # --- NEW: Save Position ---
         self.settings.setValue("pos", self.pos())
 
     def snap_to_x(self, x):
@@ -225,14 +373,14 @@ class CustomLinearInput(QWidget):
             painter.setPen(QColor("#0984E3") if i == self.current_idx else QColor("#B2BEC3"))
             painter.drawText(QRectF(tx-15, y+15, 30, 20), Qt.AlignCenter, str(val))
 
-# --- 3. FLOATING WIDGET ---
+# --- 5. FLOATING WIDGET (UPDATED) ---
 
 class FloatingWidget(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.settings = QSettings() # No arguments needed now!
-        saved_pos = self.settings.value("widget_pos")
+        self.settings = QSettings("Ikiflow", "FloatingWidget")
+        saved_pos = self.settings.value("pos")
         if saved_pos:
             self.move(saved_pos)
 
@@ -244,7 +392,7 @@ class FloatingWidget(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         # Base size
-        self.base_w, self.base_h = 240, 80
+        self.base_w, self.base_h = 240, 90 # Slightly taller for Task Label
         self.resize(self.base_w, self.base_h)
 
         # Drag / snap state
@@ -252,7 +400,12 @@ class FloatingWidget(QWidget):
         self.offset = QPoint()
         self.is_snapped = False
 
-        # Style defaults (used by settings)
+        # Intent Data State
+        self.mode = "Free"
+        self.task_list = []
+        self.current_task = ""
+
+        # Style defaults
         self.style_idx = 0
         self.corner_r_pct = 50
         self.theme_color = "#0984E3"
@@ -270,15 +423,24 @@ class FloatingWidget(QWidget):
 
         inner = QVBoxLayout(self.container)
         self.container_layout = inner
-        inner.setContentsMargins(20, 10, 20, 10)
+        inner.setContentsMargins(20, 5, 20, 10) # Adjusted margins
+        inner.setSpacing(0)
 
+        # 1. New Task Label
+        self.lbl_task = QLabel("")
+        self.lbl_task.setAlignment(Qt.AlignCenter)
+        self.lbl_task.setStyleSheet("font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 0px;")
+        
+        # 2. Timer
         self.time_lbl = QLabel("Ready")
         self.time_lbl.setAlignment(Qt.AlignCenter)
 
+        # 3. Bar
         self.bar = QProgressBar()
         self.bar.setTextVisible(False)
         self.bar.setFixedHeight(6)
 
+        inner.addWidget(self.lbl_task)
         inner.addWidget(self.time_lbl)
         inner.addWidget(self.bar)
 
@@ -287,11 +449,37 @@ class FloatingWidget(QWidget):
 
         self.apply_style()
 
-        # --- NEW: Load Saved Position ---
-        self.settings = QSettings("Ikiflow", "FloatingWidget")
-        saved_pos = self.settings.value("pos")
-        if saved_pos:
-            self.move(saved_pos)
+    # --- INTENT LOGIC (CLEAN VERSION) ---
+    def set_session_data(self, mode, tasks):
+        self.mode = mode
+        self.task_list = tasks
+        
+        # FIX: Always hide the label. The user wants a clean timer only.
+        self.lbl_task.hide() 
+        self.lbl_task.setText("") # Clear it just in case
+        
+        # We still store the task name so it saves to history.json later
+        self.current_task = tasks[0] if tasks else "Focus"
+
+    def contextMenuEvent(self, event):
+        # Only show menu if we have multiple tasks
+        if self.mode == "Deep_Multi" and len(self.task_list) > 1:
+            menu = QMenu(self)
+            menu.setStyleSheet("QMenu { background: white; border-radius: 5px; } QMenu::item { padding: 5px 20px; color: #2D3436; } QMenu::item:selected { background: #F1F2F6; }")
+            
+            lbl = menu.addAction("SWITCH TASK:")
+            lbl.setEnabled(False)
+            menu.addSeparator()
+            
+            for t in self.task_list:
+                action = menu.addAction(t)
+                action.triggered.connect(lambda checked=False, task=t: self.switch_task(task))
+            
+            menu.exec(event.globalPos())
+
+    def switch_task(self, task_name):
+        self.current_task = task_name
+        self.lbl_task.setText(task_name)
 
     # ---------- STYLE ----------
     def apply_style(self):
@@ -299,16 +487,18 @@ class FloatingWidget(QWidget):
         self.container.show()
         self.bar.show()
         self.time_lbl.show()
+        
+        # Logic to show/hide task label based on mode is handled in set_session_data
+        # Here we just set colors
 
         h = max(1, self.height())
-
         m_y = max(2, int(h * 0.1))
         m_x = max(5, int(self.width() * 0.08))
-        if self.container_layout.contentsMargins().top() != m_y:
-            self.container_layout.setContentsMargins(m_x, m_y, m_x, m_y)
-
+        
+        # Only adjust margins if they changed significantly to avoid jitter
+        # Using fixed margins usually works better with the added Label
+        
         f_size = max(10, int(h * 0.28))
-
         r_val = int((self.corner_r_pct / 100.0) * (h / 2))
         if self.style_idx == 0 and not self.is_snapped:
             r_val = h // 2
@@ -348,9 +538,11 @@ class FloatingWidget(QWidget):
             }}
         """)
 
-        self.time_lbl.setStyleSheet(
-            f"color:{text_col}; font-size:{f_size}px; font-weight:bold;"
-        )
+        self.time_lbl.setStyleSheet(f"color:{text_col}; font-size:{f_size}px; font-weight:bold; border: none;")
+        
+        # Style the task label to match text color but slightly faded
+        # Use opacity in color or just inherit text_col
+        self.lbl_task.setStyleSheet(f"color:{text_col}; font-size: 11px; font-weight: bold; text-transform: uppercase; border: none;")
 
         bar_h = max(2, int(h * 0.08))
         self.bar.setFixedHeight(bar_h)
@@ -415,13 +607,13 @@ class FloatingWidget(QWidget):
 
     def mouseReleaseEvent(self, e):
         self.dragging = False
-        self.settings.setValue("widget_pos", self.pos())
+        self.settings.setValue("pos", self.pos())
 
     def resizeEvent(self, e):
         self.apply_style()
         super().resizeEvent(e)
 
-# --- 4. OVERLAY WINDOW (Dual Mode) ---
+# --- 6. OVERLAY WINDOW ---
 
 class OverlayWindow(QWidget):
     """
@@ -429,7 +621,6 @@ class OverlayWindow(QWidget):
     1. Check-In (Ask user if done)
     2. Break Mode (Health tips + Timer)
     """
-    # Custom signals to talk to MainWindow
     action_break = Signal()
     action_extend = Signal()
     action_cancelled = Signal()
@@ -556,13 +747,11 @@ class OverlayWindow(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        # Full Black Background
         painter.setBrush(QColor(0, 0, 0, 255))
         painter.setPen(Qt.NoPen)
         painter.drawRect(self.rect())
         
     def set_message(self, text):
-        # Override for custom messages if needed
         self.msg_label.setText(text.upper())
 
     def keyPressEvent(self, event):
@@ -572,6 +761,256 @@ class OverlayWindow(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        # When window closes (via Alt+F4), tell Main Window to stop
         self.action_cancelled.emit()
         event.accept()
+
+# --- 7. SNAP SLIDER & GHOST CLOSE BUTTON (FINAL) ---
+
+class SnapSlider(QWidget):
+    """A slider that snaps to specific time steps: 5, 10, 15, 30, 45, 60"""
+    valueChanged = Signal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(50)
+        self.steps = [5, 10, 15, 30, 45, 60]
+        self.current_idx = 3 # Default to 30 min (index 3)
+        self.dragging = False
+        self.setCursor(Qt.PointingHandCursor)
+
+    def set_value(self, val):
+        if val in self.steps: self.current_idx = self.steps.index(val)
+        else: self.current_idx = min(range(len(self.steps)), key=lambda i: abs(self.steps[i]-val))
+        self.update()
+
+    def get_value(self): return self.steps[self.current_idx]
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton: self.dragging = True; self.snap_to_x(e.position().x())
+    def mouseMoveEvent(self, e):
+        if self.dragging: self.snap_to_x(e.position().x())
+    def mouseReleaseEvent(self, e): self.dragging = False
+
+    def snap_to_x(self, x):
+        width = self.width() - 20
+        step_w = width / (len(self.steps) - 1)
+        idx = int((x - 10 + (step_w/2)) / step_w)
+        idx = max(0, min(idx, len(self.steps) - 1))
+        if idx != self.current_idx:
+            self.current_idx = idx; self.valueChanged.emit(self.steps[idx]); self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing)
+        w = self.width() - 20; y = self.height() // 2; step_w = w / (len(self.steps) - 1)
+        
+        # Track
+        p.setPen(QPen(QColor("#DFE6E9"), 4, Qt.SolidLine, Qt.RoundCap)); p.drawLine(10, y, self.width()-10, y)
+        # Active
+        active_x = 10 + (self.current_idx * step_w)
+        p.setPen(QPen(QColor("#0984E3"), 4, Qt.SolidLine, Qt.RoundCap)); p.drawLine(10, y, int(active_x), y)
+        
+        p.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        for i, val in enumerate(self.steps):
+            x = 10 + (i * step_w)
+            if i == self.current_idx:
+                p.setBrush(QColor("#0984E3")); p.setPen(QPen(QColor("#FFFFFF"), 2))
+                p.drawEllipse(QPoint(int(x), y), 8, 8)
+                p.setPen(QColor("#0984E3")); p.drawText(QRectF(x-15, y-25, 30, 20), Qt.AlignCenter, str(val))
+            else:
+                p.setBrush(QColor("#DFE6E9")); p.setPen(Qt.NoPen)
+                p.drawEllipse(QPoint(int(x), y), 4, 4)
+                p.setPen(QColor("#B2BEC3")); p.drawText(QRectF(x-15, y+10, 30, 20), Qt.AlignCenter, str(val))
+
+
+class GhostCloseButton(QPushButton):
+    """A close button (X) that dodges the mouse 12 times around the corners."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        # No stylesheet needed, we paint it manually for perfect control
+        self.setCursor(Qt.PointingHandCursor)
+        self.dodge_count = 0
+        self.max_dodges = 12 
+        self.corner_index = 0 
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        
+        # Determine status
+        is_catchable = self.dodge_count >= self.max_dodges
+        is_hovered = self.underMouse()
+
+        # --- COLORS ---
+        if is_hovered and is_catchable:
+            bg_color = QColor("#FF5252") # Nice Red
+            icon_color = QColor("#FFFFFF") # White
+        else:
+            bg_color = Qt.transparent
+            icon_color = QColor("#636E72") # Dark Grey
+
+        # 1. Draw Background (Rounded Square)
+        if bg_color != Qt.transparent:
+            p.setBrush(bg_color)
+            p.setPen(Qt.NoPen)
+            p.drawRoundedRect(self.rect(), 6, 6)
+
+        # 2. Draw "X" Icon (Centered & Clean)
+        pen = QPen(icon_color, 2)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        
+        # Math to center a 10px cross
+        center = self.rect().center()
+        half_size = 5 
+        
+        # Line 1 (\)
+        p.drawLine(center.x() - half_size, center.y() - half_size, 
+                   center.x() + half_size, center.y() + half_size)
+        # Line 2 (/)
+        p.drawLine(center.x() - half_size, center.y() + half_size, 
+                   center.x() + half_size, center.y() - half_size)
+
+    def enterEvent(self, event):
+        # Trigger jump if not caught yet
+        if self.dodge_count < self.max_dodges:
+            self.dodge_count += 1
+            self.jump_to_next_corner()
+        super().enterEvent(event)
+        self.update() # Force repaint
+
+    def leaveEvent(self, event): 
+        super().leaveEvent(event)
+        self.update()
+
+    def jump_to_next_corner(self):
+        parent = self.parentWidget()
+        if not parent: return
+
+        m = 10 # Margin from window edge
+        w, h = self.width(), self.height()
+        pw, ph = parent.width(), parent.height()
+
+        # Define corners in order: [TR, TL, BL, BR]
+        corners = [
+            QPoint(pw - w - m, m),         # 0: TR
+            QPoint(m, m),                  # 1: TL
+            QPoint(m, ph - h - m),         # 2: BL
+            QPoint(pw - w - m, ph - h - m) # 3: BR
+        ]
+
+        # Cycle to next corner
+        self.corner_index = (self.corner_index + 1) % 4
+        target_pos = corners[self.corner_index]
+
+        # Smooth slide animation
+        self.anim = QPropertyAnimation(self, b"pos")
+        self.anim.setDuration(200) 
+        self.anim.setStartValue(self.pos())
+        self.anim.setEndValue(target_pos)
+        self.anim.setEasingCurve(QEasingCurve.OutQuad)
+        self.anim.start()
+
+
+class QuickStartDialog(QDialog):
+    """Popup: Cannot be closed via Esc or Alt+F4."""
+    def __init__(self, app_name, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Dialog)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.resize(420, 240)
+        
+        self.result_action = None
+        self.dragging = False
+        self.allowed_to_close = False # <--- LOCKDOWN FLAG
+
+        self.settings = QSettings("Ikiflow", "QuickStart")
+        self.last_focus = int(self.settings.value("last_focus", 30))
+        self.last_break = int(self.settings.value("last_break", 5))
+
+        layout = QVBoxLayout(self); layout.setContentsMargins(10, 10, 10, 10)
+
+        # --- CARD UI ---
+        self.card = QFrame()
+        self.card.setStyleSheet("background: #FFFFFF; border-radius: 15px;")
+        shadow = QGraphicsDropShadowEffect(self); shadow.setBlurRadius(20); shadow.setYOffset(5); shadow.setColor(QColor(0,0,0,40))
+        self.card.setGraphicsEffect(shadow)
+        layout.addWidget(self.card)
+
+        inner = QVBoxLayout(self.card); inner.setContentsMargins(20, 30, 20, 20); inner.setSpacing(15)
+
+        # 1. Title
+        lbl = QLabel(f"Focusing on {app_name}?")
+        lbl.setStyleSheet("color: #2D3436; font-size: 16px; font-weight: 800;")
+        lbl.setAlignment(Qt.AlignCenter); inner.addWidget(lbl)
+
+        # 2. Controls Row
+        control_row = QHBoxLayout()
+        self.slider = SnapSlider()
+        self.slider.set_value(self.last_focus); self.slider.valueChanged.connect(self.update_btn_text)
+        
+        self.btn_break = QPushButton(f"{self.last_break}m Break")
+        self.btn_break.setFixedSize(80, 40); self.btn_break.setCursor(Qt.PointingHandCursor)
+        self.btn_break.setStyleSheet("""
+            QPushButton { background: #F1F2F6; color: #636E72; border: 1px solid #DFE6E9; border-radius: 8px; font-weight: bold; }
+            QPushButton:hover { background: #E0E0E0; color: #2D3436; }
+        """)
+        self.btn_break.clicked.connect(self.cycle_break)
+        control_row.addWidget(self.slider, 1); control_row.addSpacing(10); control_row.addWidget(self.btn_break)
+        inner.addLayout(control_row)
+
+        # 3. Start Button
+        self.btn_start = QPushButton("Start Focus"); self.btn_start.setCursor(Qt.PointingHandCursor)
+        self.btn_start.setFixedHeight(45)
+        self.btn_start.setStyleSheet("""
+            QPushButton { background: #0984E3; color: white; border-radius: 10px; font-weight: bold; font-size: 14px; border: none; }
+            QPushButton:hover { background: #74B9FF; }
+        """)
+        self.btn_start.clicked.connect(self.accept_start); self.btn_start.setDefault(True)
+        inner.addWidget(self.btn_start)
+        self.update_btn_text(self.slider.get_value())
+
+        # --- GHOST CLOSE BUTTON ---
+        self.ghost_btn = GhostCloseButton(self)
+        m = 10
+        self.ghost_btn.move(self.width() - self.ghost_btn.width() - m, m)
+        self.ghost_btn.clicked.connect(lambda: self.finish("skip"))
+
+    def update_btn_text(self, val): self.btn_start.setText(f"Start {val}m Focus")
+    def cycle_break(self):
+        opts = [5, 10, 15, 20, 30]
+        try: idx = opts.index(int(self.btn_break.text().split("m")[0])); new_val = opts[(idx + 1) % len(opts)]
+        except: new_val = 5
+        self.btn_break.setText(f"{new_val}m Break"); self.last_break = new_val
+        
+    def accept_start(self):
+        self.settings.setValue("last_focus", self.slider.get_value()); self.settings.setValue("last_break", self.last_break)
+        self.finish("start")
+
+    def finish(self, action):
+        self.result_action = action
+        self.allowed_to_close = True # <--- Unlock closing
+        self.accept()
+
+    # --- SECURITY OVERRIDES ---
+    
+    def keyPressEvent(self, event):
+        # BLOCK ESCAPE KEY
+        if event.key() == Qt.Key_Escape:
+            event.ignore() 
+        else:
+            super().keyPressEvent(event)
+
+    def closeEvent(self, event):
+        # BLOCK ALT+F4 (System Close)
+        if not self.allowed_to_close:
+            event.ignore()
+        else:
+            super().closeEvent(event)
+
+    # Drag Logic
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton: self.dragging = True; self.drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+    def mouseMoveEvent(self, e):
+        if self.dragging: self.move(e.globalPosition().toPoint() - self.drag_pos)
+    def mouseReleaseEvent(self, e): self.dragging = False

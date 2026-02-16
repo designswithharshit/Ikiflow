@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QFrame, QScrollArea, QGraphicsDropShadowEffect, QPushButton)
 from PySide6.QtCore import Qt, Signal, QRectF, QSize, QPoint
 from PySide6.QtGui import QColor, QPainter, QPen, QFont, QBrush
+from Ikiflow_components import ModernWindowButton
 
 # --- 0. DESIGN SYSTEM CONSTANTS ---
 ACCENT       = "#0984E3"  # Ikiflow Blue
@@ -212,38 +213,74 @@ class ExpandableSessionItem(QFrame):
         g.addWidget(mk_stat("Skip", skip))
         dl.addWidget(gf)
         
-        # App Usage
+        # --- APP USAGE LOGIC ---
         apps = self.session.get("app_usage", {})
         if apps:
-            la = QLabel("APP USAGE")
+            la = QLabel("APP USAGE & IDLE TIME")
             la.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 9px; font-weight: bold; margin-top: 5px;")
             dl.addWidget(la)
-            s_apps = sorted(apps.items(), key=lambda x: x[1], reverse=True)
+
+            # 1. Consolidate Data (Fix old messy history)
+            cleaned_apps = {}
+            total_usage_sec = 0
+            
+            for name, sec in apps.items():
+                clean_name = name
+                # Apply same cleaning logic as main.py for historical data
+                if any(x in name for x in [".ai @", "(RGB/Preview)", "(CMYK/Preview)"]):
+                    clean_name = "Adobe Illustrator"
+                elif " - Google Chrome" in name:
+                    clean_name = "Google Chrome"
+                
+                cleaned_apps[clean_name] = cleaned_apps.get(clean_name, 0) + sec
+                total_usage_sec += sec
+
+            # 2. Calculate Idle Time (Actual - Spent)
+            # Use max to prevent negative numbers if data is slightly off
+            focus_actual_sec = actual * 60
+            idle_sec = max(0, focus_actual_sec - total_usage_sec)
+            
+            if idle_sec > 60: # Only show if idle > 1 min
+                cleaned_apps["☕ Idle / Break"] = idle_sec
+
+            # 3. Sort & Display
+            s_apps = sorted(cleaned_apps.items(), key=lambda x: x[1], reverse=True)
             max_v = max([v for k, v in s_apps]) if s_apps else 1
             
             for n, sec in s_apps:
-                if n == "Focus Timer" or sec < 5: continue
+                if n == "Focus Timer" or sec < 60: continue # Hide small noise < 1 min
+                
                 row = QHBoxLayout()
-                nl = QLabel(n[:18])
-                nl.setFixedWidth(100)
+                
+                # Name Label
+                nl = QLabel(n[:22]) # Truncate long names
+                nl.setFixedWidth(110)
                 nl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px;")
                 
+                # Bar Container
                 bar_bg = QFrame()
                 bar_bg.setFixedHeight(4)
                 bar_bg.setStyleSheet(f"background: {BORDER_SOFT}; border-radius: 2px;")
                 
+                # Filled Bar
                 bar_fill = QFrame(bar_bg)
                 bar_fill.setFixedHeight(4)
-                # Calmer bars using transparency
-                bar_fill.setStyleSheet(f"background: rgba(9, 132, 227, 0.6); border-radius: 2px;") 
-                bar_fill.setFixedWidth(int((sec/max_v)*100))
                 
+                # Special color for Idle
+                bar_col = "rgba(100, 100, 100, 0.4)" if "Idle" in n else f"rgba(9, 132, 227, 0.6)"
+                bar_fill.setStyleSheet(f"background: {bar_col}; border-radius: 2px;")
+                
+                # Width math
+                width_pct = (sec / max_v)
+                bar_fill.setFixedWidth(int(width_pct * 100)) # Scale to ~100px visual width
+                
+                # Time Label
                 mins = sec // 60
                 tl = QLabel(f"{mins}m")
                 tl.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 10px;")
                 
                 row.addWidget(nl)
-                row.addWidget(bar_bg, 1)
+                row.addWidget(bar_bg, 1) # Stretch bar
                 row.addWidget(tl)
                 dl.addLayout(row)
         
@@ -444,7 +481,7 @@ class AnalyzerWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Reflection")
-        self.resize(850, 620)
+        self.showMaximized()
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         
@@ -550,17 +587,26 @@ class AnalyzerWindow(QWidget):
         left_col.addStretch()
         main_content.addLayout(left_col)
 
-        # Right Col
+        # --- RIGHT COLUMN ---
         right_col = QVBoxLayout()
-        lbl_detail = QLabel("SESSION DETAIL")
-        lbl_detail.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        right_col.addWidget(lbl_detail)
+        
+        # 1. Day Overview Header (NEW)
+        self.lbl_day_header = QLabel("SESSION DETAIL") # Placeholder, will update dynamically
+        self.lbl_day_header.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 14px; font-weight: 800; letter-spacing: 0.5px;")
+        right_col.addWidget(self.lbl_day_header)
+        
+        self.lbl_day_sub = QLabel("Select a day to view sessions")
+        self.lbl_day_sub.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 11px; font-weight: bold; margin-bottom: 5px;")
+        right_col.addWidget(self.lbl_day_sub)
+        
+        # 2. The List
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background: transparent; border: none;")
         self.timeline = Timeline(self.engine)
         scroll.setWidget(self.timeline)
         right_col.addWidget(scroll)
+        
         main_content.addLayout(right_col, 1)
         layout.addLayout(main_content)
 
@@ -571,7 +617,7 @@ class AnalyzerWindow(QWidget):
         self.update_week_header()
         self.month_grid.set_date(self.current_month_date)
         self.chart.set_anchor(self.current_week_date)
-        self.timeline.update_date(self.current_week_date.strftime("%Y-%m-%d"))
+        self.update_day_overview(self.current_week_date.strftime("%Y-%m-%d"))
 
     def create_nav_btn(self, text, func):
         b = QPushButton(text)
@@ -583,6 +629,28 @@ class AnalyzerWindow(QWidget):
         """)
         b.clicked.connect(func)
         return b
+
+    def update_day_overview(self, date_str):
+        # 1. Update Timeline
+        self.timeline.update_date(date_str)
+        
+        # 2. Calculate Daily Totals
+        sessions = self.engine.get_sessions_for_date(date_str)
+        total_mins = sum(s.get("focus_actual", 0) for s in sessions)
+        hours = total_mins / 60
+        
+        # 3. Format Date Text
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        date_nice = dt.strftime("%d %b") # e.g. "16 Feb"
+        
+        # 4. Update Labels
+        self.lbl_day_header.setText(f"{date_nice} · {hours:.1f} hrs Total")
+        
+        if not sessions:
+            self.lbl_day_sub.setText("No activity recorded")
+        else:
+            count = len(sessions)
+            self.lbl_day_sub.setText(f"{count} Sessions Recorded")
 
     def update_week_header(self):
         start = self.current_week_date - timedelta(days=self.current_week_date.weekday())
@@ -625,7 +693,7 @@ class AnalyzerWindow(QWidget):
         self.current_week_date = d
         self.chart.set_anchor(d)
         self.update_week_header()
-        self.timeline.update_date(date_str)
+        self.update_day_overview(date_str)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
