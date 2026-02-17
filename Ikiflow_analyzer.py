@@ -1,12 +1,13 @@
 import json
 import os
 import calendar
+import sys 
+from pathlib import Path
 from datetime import datetime, timedelta
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QFrame, QScrollArea, QGraphicsDropShadowEffect, QPushButton)
-from PySide6.QtCore import Qt, Signal, QRectF, QSize, QPoint
-from PySide6.QtGui import QColor, QPainter, QPen, QFont, QBrush
-from Ikiflow_components import ModernWindowButton
+                               QFrame, QScrollArea, QPushButton, QApplication)
+from PySide6.QtCore import Qt, Signal, QRectF
+from PySide6.QtGui import QColor, QPainter, QPen, QFont
 
 # --- 0. DESIGN SYSTEM CONSTANTS ---
 ACCENT       = "#0984E3"  # Ikiflow Blue
@@ -20,20 +21,34 @@ BORDER_SOFT  = "#ECEFF1"
 SUCCESS      = "#00B894"
 WARNING      = "#FAB1A0"
 
-# --- 1. DATA ENGINE ---
+# --- 1. DATA ENGINE (Unchanged) ---
 class AnalyzerData:
     def __init__(self):
-        base_path = os.path.dirname(os.path.abspath(__file__))
-        self.filepath = os.path.join(base_path, "history.json")
-        if not os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, 'w') as f: json.dump([], f)
-            except: pass
+        # --- MATCHING PATH: User Profile ---
+        self.app_data_dir = Path(os.environ['USERPROFILE']) / "Ikiflow_Data"
+        self.filename = self.app_data_dir / "history.json"
+        
+        self.sessions = []
+        self.load_data()
 
     def load_data(self):
+        if not self.filename.exists():
+            self.sessions = []
+            return []
+
         try:
-            with open(self.filepath, 'r') as f: return json.load(f)
-        except: return []
+            with open(self.filename, "r") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    self.sessions = data
+                    return data
+                else:
+                    return []
+        except Exception as e:    
+            self.sessions = []
+            return []
+        
+        # --- CRITICAL FIX: Return empty list on error
 
     def get_stats(self):
         data = self.load_data()
@@ -52,7 +67,6 @@ class AnalyzerData:
             streak += 1
             check -= timedelta(days=1)
 
-        # Logic Extra: Consistency Score (Simple metric 0-100 based on streak)
         consistency = min(100, int((streak / 7) * 100))
 
         return {
@@ -79,6 +93,12 @@ class AnalyzerData:
 
     def get_week_data(self, anchor_date):
         data = self.load_data()
+
+        # --- SAFETY CHECK ---
+        if data is None: 
+            data = [] 
+        # --------------------
+
         start = anchor_date - timedelta(days=anchor_date.weekday())
         week_data = []
         for i in range(7):
@@ -93,25 +113,22 @@ class AnalyzerData:
         return [s for s in data if s.get("date") == date_str]
 
 
-# --- 2. COMPONENTS ---
+# --- 2. COMPONENTS (Unchanged) ---
 
 class StatCard(QFrame):
     def __init__(self, title, value, icon_char):
         super().__init__()
         self.setFixedSize(160, 80)
-        # Cleaner, softer border
-        self.setStyleSheet(f"QFrame {{ background-color: {BG_SOFT}; border-radius: 12px; border: 1px solid {BORDER_SOFT}; }}")
+        self.setStyleSheet(f"QFrame {{ background-color: {BG_CARD}; border-radius: 12px; border: 1px solid {BORDER_SOFT}; }}")
         
         l = QVBoxLayout(self)
         l.setContentsMargins(15, 10, 15, 10)
         
         h = QHBoxLayout()
         t = QLabel(title.upper())
-        # Visual Hierarchy: Muted title
         t.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 9px; font-weight: 700; letter-spacing: 1px; border: none;")
         
         i = QLabel(icon_char)
-        # Visual Hierarchy: Icon as background texture
         i.setStyleSheet(f"color: {ACCENT_FADE}; font-size: 28px; border: none;")
         
         h.addWidget(t)
@@ -119,7 +136,6 @@ class StatCard(QFrame):
         h.addWidget(i)
         
         v = QLabel(str(value))
-        # Visual Hierarchy: Dominant Value
         v.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 24px; font-weight: 900; border: none; background: transparent;")
         
         l.addLayout(h)
@@ -131,7 +147,6 @@ class ExpandableSessionItem(QFrame):
         self.session = session
         self.is_expanded = False
         
-        # Base Style
         self.setStyleSheet(f"""
             QFrame {{ background: {BG_CARD}; border: 1px solid {BORDER_SOFT}; border-radius: 8px; }}
             QFrame:hover {{ border: 1px solid {ACCENT}; }}
@@ -139,7 +154,7 @@ class ExpandableSessionItem(QFrame):
         
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(15, 12, 15, 12)
-        self.layout.setSpacing(0) # Will animate this logic later
+        self.layout.setSpacing(0)
 
         # --- A. HEADER ---
         self.header = QWidget()
@@ -149,10 +164,8 @@ class ExpandableSessionItem(QFrame):
         
         ts = datetime.fromisoformat(self.session["timestamp"])
         lbl_time = QLabel(ts.strftime("%I:%M %p"))
-        # Stronger time contrast
         lbl_time.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 13px; font-weight: 800; border: none;")
         
-        # Logic Extra: Quality Badge
         planned = self.session.get("focus_planned", 1)
         actual = self.session.get("focus_actual", 0)
         ratio = actual / planned if planned > 0 else 0
@@ -185,7 +198,6 @@ class ExpandableSessionItem(QFrame):
         dl = QVBoxLayout(self.details)
         dl.setContentsMargins(0, 10, 0, 0)
         
-        # Grid Stats
         gf = QFrame()
         gf.setStyleSheet(f"background: {BG_SOFT}; border-radius: 6px; border: none;")
         g = QHBoxLayout(gf)
@@ -213,20 +225,18 @@ class ExpandableSessionItem(QFrame):
         g.addWidget(mk_stat("Skip", skip))
         dl.addWidget(gf)
         
-        # --- APP USAGE LOGIC ---
+        # App Usage Logic
         apps = self.session.get("app_usage", {})
         if apps:
             la = QLabel("APP USAGE & IDLE TIME")
             la.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 9px; font-weight: bold; margin-top: 5px;")
             dl.addWidget(la)
 
-            # 1. Consolidate Data (Fix old messy history)
             cleaned_apps = {}
             total_usage_sec = 0
             
             for name, sec in apps.items():
                 clean_name = name
-                # Apply same cleaning logic as main.py for historical data
                 if any(x in name for x in [".ai @", "(RGB/Preview)", "(CMYK/Preview)"]):
                     clean_name = "Adobe Illustrator"
                 elif " - Google Chrome" in name:
@@ -235,52 +245,42 @@ class ExpandableSessionItem(QFrame):
                 cleaned_apps[clean_name] = cleaned_apps.get(clean_name, 0) + sec
                 total_usage_sec += sec
 
-            # 2. Calculate Idle Time (Actual - Spent)
-            # Use max to prevent negative numbers if data is slightly off
             focus_actual_sec = actual * 60
             idle_sec = max(0, focus_actual_sec - total_usage_sec)
             
-            if idle_sec > 60: # Only show if idle > 1 min
+            if idle_sec > 60:
                 cleaned_apps["☕ Idle / Break"] = idle_sec
 
-            # 3. Sort & Display
             s_apps = sorted(cleaned_apps.items(), key=lambda x: x[1], reverse=True)
             max_v = max([v for k, v in s_apps]) if s_apps else 1
             
             for n, sec in s_apps:
-                if n == "Focus Timer" or sec < 60: continue # Hide small noise < 1 min
+                if n == "Focus Timer" or sec < 60: continue
                 
                 row = QHBoxLayout()
-                
-                # Name Label
-                nl = QLabel(n[:22]) # Truncate long names
+                nl = QLabel(n[:22])
                 nl.setFixedWidth(110)
                 nl.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px;")
                 
-                # Bar Container
                 bar_bg = QFrame()
                 bar_bg.setFixedHeight(4)
                 bar_bg.setStyleSheet(f"background: {BORDER_SOFT}; border-radius: 2px;")
                 
-                # Filled Bar
                 bar_fill = QFrame(bar_bg)
                 bar_fill.setFixedHeight(4)
                 
-                # Special color for Idle
                 bar_col = "rgba(100, 100, 100, 0.4)" if "Idle" in n else f"rgba(9, 132, 227, 0.6)"
                 bar_fill.setStyleSheet(f"background: {bar_col}; border-radius: 2px;")
                 
-                # Width math
                 width_pct = (sec / max_v)
-                bar_fill.setFixedWidth(int(width_pct * 100)) # Scale to ~100px visual width
+                bar_fill.setFixedWidth(int(width_pct * 100))
                 
-                # Time Label
                 mins = sec // 60
                 tl = QLabel(f"{mins}m")
                 tl.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 10px;")
                 
                 row.addWidget(nl)
-                row.addWidget(bar_bg, 1) # Stretch bar
+                row.addWidget(bar_bg, 1)
                 row.addWidget(tl)
                 dl.addLayout(row)
         
@@ -292,15 +292,14 @@ class ExpandableSessionItem(QFrame):
             self.details.hide()
             self.arrow.setText("▼")
             self.setStyleSheet(f"QFrame {{ background: {BG_CARD}; border: 1px solid {BORDER_SOFT}; border-radius: 8px; }} QFrame:hover {{ border: 1px solid {ACCENT}; }}")
-            self.layout.setSpacing(0) # Collapse spacing
+            self.layout.setSpacing(0)
         else:
             self.details.show()
             self.arrow.setText("▲")
             self.setStyleSheet(f"QFrame {{ background: {BG_CARD}; border: 1px solid {ACCENT}; border-radius: 8px; }}")
-            self.layout.setSpacing(8) # Breathe spacing
+            self.layout.setSpacing(8)
             
         self.is_expanded = not self.is_expanded
-        self.parentWidget().adjustSize()
 
 class MonthGrid(QWidget):
     dayClicked = Signal(str)
@@ -333,7 +332,7 @@ class MonthGrid(QWidget):
         days = ["M", "T", "W", "T", "F", "S", "S"]
         start_y, cell, gap = 45, 28, 8
         p.setFont(QFont("Segoe UI", 9, QFont.Bold))
-        p.setPen(QColor(TEXT_QUIET)) # Faded headers
+        p.setPen(QColor(TEXT_QUIET))
         for i, d in enumerate(days):
             p.drawText(QRectF(i*(cell+gap), start_y, cell, 20), Qt.AlignCenter, d)
 
@@ -349,7 +348,6 @@ class MonthGrid(QWidget):
                 rect = QRectF(c*(cell+gap), grid_y + r*(cell+gap), cell, cell)
                 st = status_map.get(day, "empty")
                 
-                # Logic Extra: Today Indicator
                 is_today = (day == today.day and 
                             self.view_date.month == today.month and 
                             self.view_date.year == today.year)
@@ -365,18 +363,16 @@ class MonthGrid(QWidget):
                     p.drawRoundedRect(rect, 6, 6)
                     p.setPen(QColor(ACCENT))
                 else:
-                    # Faded empty cells
-                    p.setBrush(QColor("#FAFBFC")) 
+                    p.setBrush(QColor("#FFFFFF")) 
                     p.setPen(Qt.NoPen)
                     p.drawRoundedRect(rect, 6, 6)
                     p.setPen(QColor(TEXT_QUIET))
                 
                 if is_today:
                     p.setPen(QPen(QColor(TEXT_MAIN), 2))
-                    # Draw subtle ring for today
                     p.setBrush(Qt.NoBrush)
                     p.drawRoundedRect(rect.adjusted(1,1,-1,-1), 6, 6)
-                    if st == "filled": p.setPen(QColor("#FFFFFF")) # Keep text white if filled
+                    if st == "filled": p.setPen(QColor("#FFFFFF"))
                 
                 p.setFont(QFont("Segoe UI", 10))
                 p.drawText(rect, Qt.AlignCenter, str(day))
@@ -405,13 +401,10 @@ class EnergyChart(QWidget):
 
     def refresh_data(self):
         self.data = self.engine.get_week_data(self.week_anchor)
-        
-        # Logic Extra: Insight calculation
         total = sum(m for _, m in self.data)
         if total == 0: self.insight = "Low focus week"
         elif total < 300: self.insight = "Building momentum"
         else: self.insight = "Strong focus rhythm"
-        
         self.update()
 
     def get_insight(self):
@@ -433,7 +426,6 @@ class EnergyChart(QWidget):
         for i, (date, mins) in enumerate(self.data):
             x = i * w
             
-            # Rounded, soft selection
             if i == self.sel_idx:
                 p.setBrush(QColor(BG_SOFT))
                 p.setPen(Qt.NoPen)
@@ -442,9 +434,8 @@ class EnergyChart(QWidget):
             bh = (mins / max_v) * (h - 40)
             bh = max(4, bh) if mins > 0 else 0
             
-            # Transparent inactive bars
             col = QColor(ACCENT) if mins > 0 else QColor("#DFE6E9")
-            if mins == 0: col.setAlpha(100) # Fade empty bars more
+            if mins == 0: col.setAlpha(100)
             
             p.setBrush(col)
             p.setPen(Qt.NoPen)
@@ -476,62 +467,73 @@ class Timeline(QWidget):
         for s in sessions:
             self.layout.addWidget(ExpandableSessionItem(s))
 
-# --- 3. MAIN ANALYZER WINDOW ---
+# --- 3. MAIN ANALYZER WINDOW (REVISED) ---
 class AnalyzerWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Reflection")
-        self.showMaximized()
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
         
+        # USE DEFAULT WINDOW FLAGS (Native Title Bar)
+        self.setWindowFlags(Qt.Window) 
+        
+        # Set background color for the whole window
+        self.setStyleSheet(f"background-color: {BG_SOFT};")
+
         self.engine = AnalyzerData()
         self.current_month_date = datetime.now()
         self.current_week_date = datetime.now()
+        self.is_maximized_state = True
         
-        root = QVBoxLayout(self)
-        self.card = QFrame()
-        self.card.setStyleSheet(f"background: {BG_CARD}; border-radius: 20px;")
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(40)
-        shadow.setColor(QColor(0,0,0,40))
-        self.card.setGraphicsEffect(shadow)
-        root.addWidget(self.card)
-        
-        layout = QVBoxLayout(self.card)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(15)
+        # Main Layout attached directly to Window
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(30, 20, 30, 30)
+        self.layout.setSpacing(15)
 
-        # Header
+        # --- HEADER ROW ---
         h_row = QHBoxLayout()
         title = QLabel("Reflection")
         title.setStyleSheet(f"font-size: 24px; font-weight: 800; color: {TEXT_MAIN};")
-        btn_close = QPushButton("×")
-        btn_close.setFixedSize(30, 30)
-        btn_close.setCursor(Qt.PointingHandCursor)
-        btn_close.setStyleSheet(f"background: transparent; color: {TEXT_QUIET}; font-size: 24px; border: none;")
-        btn_close.clicked.connect(self.close)
+        
+        # Toggle Button (Floating vs Full)
+        self.btn_toggle = QPushButton("⧉ Restore")
+        self.btn_toggle.setFixedSize(90, 30)
+        self.btn_toggle.setCursor(Qt.PointingHandCursor)
+        self.btn_toggle.setStyleSheet(f"""
+            QPushButton {{
+                background: {BG_CARD};
+                color: {TEXT_DIM};
+                font-size: 11px;
+                font-weight: bold;
+                border: 1px solid {BORDER_SOFT};
+                border-radius: 6px;
+            }}
+            QPushButton:hover {{
+                border: 1px solid {ACCENT};
+                color: {ACCENT};
+            }}
+        """)
+        self.btn_toggle.clicked.connect(self.toggle_mode)
+
         h_row.addWidget(title)
         h_row.addStretch()
-        h_row.addWidget(btn_close)
-        layout.addLayout(h_row)
+        h_row.addWidget(self.btn_toggle)
+        self.layout.addLayout(h_row)
 
-        # Stats
+        # --- STATS ROW ---
         stats = self.engine.get_stats()
         stat_row = QHBoxLayout()
         stat_row.addWidget(StatCard("Streak", f"{stats['streak']}", "🔥"))
         stat_row.addWidget(StatCard("Total Hours", f"{stats['total_hours']}", "⏳"))
-        # Logic Extra: Showing Consistency instead of Avg (Switchable)
         stat_row.addWidget(StatCard("Consistency", f"{stats['consistency']}%", "⚡"))
         stat_row.addStretch()
-        layout.addLayout(stat_row)
+        self.layout.addLayout(stat_row)
         
         line = QFrame()
         line.setFixedHeight(1)
         line.setStyleSheet(f"background: {BORDER_SOFT}; margin: 5px 0;")
-        layout.addWidget(line)
+        self.layout.addWidget(line)
 
-        # Content
+        # --- MAIN CONTENT ---
         main_content = QHBoxLayout()
         left_col = QVBoxLayout()
         left_col.setSpacing(20)
@@ -577,7 +579,6 @@ class AnalyzerWindow(QWidget):
         self.chart = EnergyChart(self.engine) 
         week_container.addWidget(self.chart)
         
-        # Logic Extra: Weekly Insight Label
         self.lbl_insight = QLabel("Loading...")
         self.lbl_insight.setStyleSheet(f"color: {ACCENT}; font-size: 10px; font-weight: bold; margin-top: 5px;")
         self.lbl_insight.setAlignment(Qt.AlignCenter)
@@ -590,8 +591,7 @@ class AnalyzerWindow(QWidget):
         # --- RIGHT COLUMN ---
         right_col = QVBoxLayout()
         
-        # 1. Day Overview Header (NEW)
-        self.lbl_day_header = QLabel("SESSION DETAIL") # Placeholder, will update dynamically
+        self.lbl_day_header = QLabel("SESSION DETAIL")
         self.lbl_day_header.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 14px; font-weight: 800; letter-spacing: 0.5px;")
         right_col.addWidget(self.lbl_day_header)
         
@@ -599,7 +599,6 @@ class AnalyzerWindow(QWidget):
         self.lbl_day_sub.setStyleSheet(f"color: {TEXT_QUIET}; font-size: 11px; font-weight: bold; margin-bottom: 5px;")
         right_col.addWidget(self.lbl_day_sub)
         
-        # 2. The List
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("background: transparent; border: none;")
@@ -608,9 +607,9 @@ class AnalyzerWindow(QWidget):
         right_col.addWidget(scroll)
         
         main_content.addLayout(right_col, 1)
-        layout.addLayout(main_content)
+        self.layout.addLayout(main_content)
 
-        # Init
+        # Init Data
         self.chart.daySelected.connect(self.timeline.update_date)
         self.month_grid.dayClicked.connect(self.jump_to_date)
         self.update_month_header()
@@ -619,38 +618,52 @@ class AnalyzerWindow(QWidget):
         self.chart.set_anchor(self.current_week_date)
         self.update_day_overview(self.current_week_date.strftime("%Y-%m-%d"))
 
+        # START MAXIMIZED
+        self.showMaximized()
+
+    def toggle_mode(self):
+        if self.is_maximized_state:
+            # Switch to Floating (Windowed)
+            self.showNormal()
+            self.resize(600, 800) # Nice floating size
+            self.btn_toggle.setText("□ Maximize")
+            self.is_maximized_state = False
+            # Center it roughly
+            if self.screen():
+                screen_geom = self.screen().availableGeometry()
+                self.move(
+                    screen_geom.left() + (screen_geom.width() - 1000) // 2,
+                    screen_geom.top() + (screen_geom.height() - 700) // 2
+                )
+        else:
+            # Switch to Full Screen
+            self.showMaximized()
+            self.btn_toggle.setText("⧉ Restore")
+            self.is_maximized_state = True
+
     def create_nav_btn(self, text, func):
         b = QPushButton(text)
         b.setFixedSize(24, 24)
         b.setCursor(Qt.PointingHandCursor)
         b.setStyleSheet(f"""
-            QPushButton {{ background: {BG_SOFT}; border-radius: 12px; font-weight: bold; color: {TEXT_DIM}; border: none;}}
+            QPushButton {{ background: {BG_CARD}; border-radius: 12px; font-weight: bold; color: {TEXT_DIM}; border: 1px solid {BORDER_SOFT};}}
             QPushButton:hover {{ background: #DFE6E9; color: {TEXT_MAIN}; }}
         """)
         b.clicked.connect(func)
         return b
 
     def update_day_overview(self, date_str):
-        # 1. Update Timeline
         self.timeline.update_date(date_str)
-        
-        # 2. Calculate Daily Totals
         sessions = self.engine.get_sessions_for_date(date_str)
         total_mins = sum(s.get("focus_actual", 0) for s in sessions)
         hours = total_mins / 60
-        
-        # 3. Format Date Text
         dt = datetime.strptime(date_str, "%Y-%m-%d")
-        date_nice = dt.strftime("%d %b") # e.g. "16 Feb"
-        
-        # 4. Update Labels
+        date_nice = dt.strftime("%d %b")
         self.lbl_day_header.setText(f"{date_nice} · {hours:.1f} hrs Total")
-        
         if not sessions:
             self.lbl_day_sub.setText("No activity recorded")
         else:
-            count = len(sessions)
-            self.lbl_day_sub.setText(f"{count} Sessions Recorded")
+            self.lbl_day_sub.setText(f"{len(sessions)} Sessions Recorded")
 
     def update_week_header(self):
         start = self.current_week_date - timedelta(days=self.current_week_date.weekday())
@@ -660,7 +673,6 @@ class AnalyzerWindow(QWidget):
         else:
             text = f"{start.strftime('%b %d, %Y')} - {end.strftime('%b %d, %Y')}"
         self.lbl_week_range.setText(text)
-        # Update Insight Label
         self.lbl_insight.setText(self.chart.get_insight())
 
     def prev_month(self):
@@ -695,9 +707,9 @@ class AnalyzerWindow(QWidget):
         self.update_week_header()
         self.update_day_overview(date_str)
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-    def mouseMoveEvent(self, event):
-        if event.buttons() == Qt.LeftButton:
-            self.move(event.globalPosition().toPoint() - self.drag_pos)
+# --- 4. EXECUTION ---
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = AnalyzerWindow()
+    window.show() # showMaximized is called inside init
+    sys.exit(app.exec())

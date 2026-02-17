@@ -29,7 +29,7 @@ from Ikiflow_analyzer import AnalyzerWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.4.5"
+        self.current_version = "2.4.6"
         self.setWindowTitle("Ikiflow")
         try:
             self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
@@ -126,7 +126,8 @@ class MainWindow(QMainWindow):
         triggers = [
             "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
             "After Effects", "Blender", "Figma", "Visual Studio Code", 
-            "PyCharm", "Unity", "Unreal Editor", "Notepad" 
+            "PyCharm", "Unity", "Unreal Editor", "Notepad", "Google Chrome",
+            "Youtube", "Github Desktop", "Github"
         ]
         
         detected = None
@@ -389,12 +390,22 @@ class MainWindow(QMainWindow):
         return page
 
     def open_analyzer(self):
-        # Create it if it doesn't exist, or just show it
-        if not hasattr(self, 'analyzer_window') or self.analyzer_window is None:
-            self.analyzer_window = AnalyzerWindow()
-        
-        self.analyzer_window.show()
-        self.analyzer_window.activateWindow()
+        print("DEBUG: Analyzer Button Clicked") 
+        try:
+            # Create it if it doesn't exist, or just show it
+            if not hasattr(self, 'analyzer_window') or self.analyzer_window is None:
+                print("DEBUG: Initializing AnalyzerWindow...")
+                self.analyzer_window = AnalyzerWindow()
+            
+            print("DEBUG: Showing AnalyzerWindow...")
+            self.analyzer_window.show()
+            self.analyzer_window.activateWindow()
+            
+        except Exception as e:
+            print(f"CRITICAL ERROR opening analyzer: {e}")
+            # This will print the exact line number of the error
+            import traceback
+            traceback.print_exc()
 
     def create_active_page(self):
         page = QWidget()
@@ -596,42 +607,54 @@ class MainWindow(QMainWindow):
             self.lbl_status.setText("Session Paused")
 
     def start_actual_break(self):
-        # --- FIX: SAVE SESSION NOW ---
-        # Now we know the user is truly done, including any extensions.
-        planned_mins = self.input_focus.value() # Initial goal
+        print("DEBUG: Break Button Clicked!") # Check your terminal for this
         
-        # Calculate actual time based on total accumulated time
-        elapsed_seconds = self.total_time  # Since time_left is 0, total_time is what we did
-        actual_mins = elapsed_seconds // 60
-        
-        # Capture final app usage state
-        self.track_current_app()
-        
-        self.history_manager.save_session(
-            duration_planned=planned_mins,
-            duration_actual=actual_mins,
-            break_duration=self.input_break.value(),
-            status="Completed",
-            app_data=self.session_app_data
-        )
-        # -----------------------------
+        try:
+            # 1. Calculate stats
+            planned_mins = self.input_focus.value()
+            elapsed_seconds = self.total_time 
+            actual_mins = elapsed_seconds // 60
+            
+            # 2. Try to save (The likely crash point)
+            # We wrap this so if it fails, the break still starts!
+            try:
+                self.history_manager.save_session(
+                    duration_planned=planned_mins,
+                    duration_actual=actual_mins,
+                    break_duration=self.input_break.value(),
+                    status="Completed",
+                    app_data=getattr(self, 'session_app_data', {}) 
+                )
+            except Exception as e:
+                print(f"WARNING: Could not save history, but continuing break. Error: {e}")
 
-        self.is_break = True
-        self.sound_engine.stop()
-        self.btn_ambient.setChecked(False)
-        self.btn_ambient.setText("Turn On Noise")
+            # 3. UI Updates (The part you want to see)
+            self.is_break = True
+            
+            # Stop noise safely
+            if hasattr(self, 'sound_engine'):
+                self.sound_engine.stop()
+            
+            if hasattr(self, 'btn_ambient'):
+                self.btn_ambient.setChecked(False)
+                self.btn_ambient.setText("Turn On Noise")
 
-        mins = self.input_break.value()
-        self.total_time = mins * 60
-        self.time_left = self.total_time
+            # Setup Timer for Break
+            mins = self.input_break.value()
+            self.total_time = mins * 60
+            self.time_left = self.total_time
 
-        self.lbl_status.setText("Break Time")
-        self.lbl_status.setStyleSheet("color: #00B894; font-size: 18px; font-weight: bold; background: transparent; border: none;")
+            # Visuals
+            self.lbl_status.setText("Break Time")
+            self.lbl_status.setStyleSheet("color: #00B894; font-size: 18px; font-weight: bold; background: transparent; border: none;")
 
-        # Switch overlay to timer mode
-        self.overlay.show_break_mode()
-        self.timer.start(1000)
-
+            # 4. SWITCH OVERLAY
+            self.overlay.show_break_mode()
+            self.timer.start(1000)
+            
+        except Exception as main_e:
+            print(f"CRITICAL ERROR in start_actual_break: {main_e}")
+    
     def stop_timer(self):
 
         # --- NEW: Stop Tracking ---
@@ -828,118 +851,36 @@ if __name__ == "__main__":
     # --- IMPORTANT: This allows QSettings to work globally ---
     app.setOrganizationName("DesignWithHarshit")
     app.setApplicationName("Ikiflow")
-    # ---------------------------------------------------------
-    
     app.setQuitOnLastWindowClosed(False)
     app.setStyleSheet(STYLESHEET)
     
-    window = None
+    window = MainWindow()
     
 # --- CONTEXT AWARENESS LOGIC ---
 
-    def monitor_context(self):
-        # 1. Don't interrupt if already busy
-        if self.is_running or self.isVisible(): 
-            return
+    # 3. Handle Single Instance Wake-up Calls
+    def handle_show_request(socket):
+        data = socket.readAll().data().decode()
+        if data == "SHOW_WINDOW" and window is not None:
+            window.showNormal() 
+            window.raise_()
+            window.activateWindow()
+        socket.disconnectFromServer()
 
-        # 2. Get active window title
-        title = get_active_window_title()
-        
-        # 3. Define your trigger apps
-        # You can add "Notepad" or "Chrome" here to test it easily!
-        triggers = [
-            "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
-            "After Effects", "Blender", "Figma", "Visual Studio Code", 
-            "PyCharm", "Unity", "Unreal Editor", "Notepad" 
-        ]
-        
-        detected = None
-        for t in triggers:
-            if t in title:
-                detected = t
-                break
-        
-        # 4. Trigger Popup if new app detected
-        if detected and detected != self.last_triggered_app:
-            self.last_triggered_app = detected
-            self.trigger_quick_start(detected)
-            
-        # Reset if user leaves the app (allows re-triggering later)
-        if not detected:
-            self.last_triggered_app = None
-
-    def trigger_quick_start(self, app_name):
-        # Pause monitor so it doesn't fire multiple times
-        self.context_timer.stop()
-        
-        # Show the "Ghost Button" Dialog
-        dialog = QuickStartDialog(app_name, self)
-        if dialog.exec() == QDialog.Accepted:
-            action = dialog.result_action
-            
-            if action == "start":
-                # Instant 30-min Focus
-                self.input_focus.spin_box.setValue(30)
-                self.start_timer_direct(mode="Deep_Single", tasks=[f"Working in {app_name}"])
-                
-            elif action == "custom":
-                # Open main window
-                self.showNormal()
-                self.activateWindow()
-                self.stack.setCurrentIndex(0) # Go to setup tab
-                # Optional: Open intent dialog immediately
-                
-            elif action == "skip":
-                pass # They caught the ghost button!
-        
-        # Resume monitoring
-        self.context_timer.start(3000)
-
-    def start_timer_direct(self, mode, tasks):
-        """Bypasses the Intent Dialog for Quick Starts"""
-        self.floater.set_session_data(mode, tasks)
-        self.floater.show()
-        self.floater.setWindowState(Qt.WindowNoState)
-        self.floater.raise_()
-        self.floater.activateWindow()
-
-        mins = self.input_focus.value()
-        self.total_time = mins * 60
-        self.time_left = self.total_time
-        
-        self.is_break = False
-        self.is_running = True
-        self.session_app_data = {} 
-        
-        self.hide() 
-        self.timer.start(1000)
-        self.update_display()
-        self.sound_engine.play_sound("start")
-    
-    # Create and show main window
-    def show_main_window():
-        global window
-        window = MainWindow()
-        window.show()
-        window.raise_()
-        window.activateWindow()
-    
-    show_main_window()
-    
-    # Connect to the local server to handle show window requests
     def handle_new_connection():
         socket = local_server.nextPendingConnection()
         if socket:
             socket.readyRead.connect(lambda: handle_show_request(socket))
-    
-    def handle_show_request(socket):
-        data = socket.readAll().data().decode()
-        if data == "SHOW_WINDOW" and window is not None:
-            window.show()
-            window.raise_()
-            window.activateWindow()
-        socket.disconnectFromServer()
-    
+            
     local_server.newConnection.connect(handle_new_connection)
+
+    # 4. STARTUP LOGIC
+    if "--silent" in sys.argv:
+        print("Ikiflow started in silent mode (System Tray)")
+        # Do not show window
+    else:
+        window.showNormal()
+        window.raise_()
+        window.activateWindow()
     
     sys.exit(app.exec())

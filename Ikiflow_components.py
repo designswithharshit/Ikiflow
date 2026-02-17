@@ -621,6 +621,7 @@ class OverlayWindow(QWidget):
     1. Check-In (Ask user if done)
     2. Break Mode (Health tips + Timer)
     """
+    # Custom signals to talk to MainWindow
     action_break = Signal()
     action_extend = Signal()
     action_cancelled = Signal()
@@ -658,7 +659,7 @@ class OverlayWindow(QWidget):
             QPushButton { background-color: #00B894; color: white; border-radius: 12px; font-weight: bold; font-size: 16px; border: none; }
             QPushButton:hover { background-color: #00A383; }
         """)
-        btn_yes.clicked.connect(self.action_break.emit)
+        btn_yes.clicked.connect(lambda: self.action_break.emit())
         
         # No Button
         btn_no = QPushButton("NO, +5 MINUTES")
@@ -668,7 +669,7 @@ class OverlayWindow(QWidget):
             QPushButton { background-color: #0984E3; color: white; border-radius: 12px; font-weight: bold; font-size: 16px; border: none; }
             QPushButton:hover { background-color: #74B9FF; }
         """)
-        btn_no.clicked.connect(self.action_extend.emit)
+        btn_no.clicked.connect(lambda: self.action_extend.emit())
         
         btn_layout.addStretch()
         btn_layout.addWidget(btn_yes)
@@ -747,11 +748,13 @@ class OverlayWindow(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        # Full Black Background
         painter.setBrush(QColor(0, 0, 0, 255))
         painter.setPen(Qt.NoPen)
         painter.drawRect(self.rect())
         
     def set_message(self, text):
+        # Override for custom messages if needed
         self.msg_label.setText(text.upper())
 
     def keyPressEvent(self, event):
@@ -761,6 +764,7 @@ class OverlayWindow(QWidget):
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
+        # When window closes (via Alt+F4), tell Main Window to stop
         self.action_cancelled.emit()
         event.accept()
 
