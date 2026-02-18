@@ -1,12 +1,99 @@
+import os
+from pathlib import Path
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QPushButton, QComboBox, QButtonGroup, QScrollArea, 
                                QGroupBox, QCheckBox, QLineEdit, QFormLayout, 
-                               QFrame, QGraphicsDropShadowEffect, QScrollBar)
-from PySide6.QtCore import Qt, Signal, QRectF, QPoint, QPropertyAnimation, QEasingCurve
+                               QFrame, QGraphicsDropShadowEffect, QScrollBar,
+                               QGridLayout, QSizePolicy) 
+from PySide6.QtCore import (Qt, Signal, QRectF, QPoint, QPropertyAnimation, 
+                            QEasingCurve, QSettings, QTimer, QAbstractAnimation, 
+                            QParallelAnimationGroup)
 from PySide6.QtGui import QColor, QPainter, QPen, QFont, QCursor
-from PySide6.QtCore import QSettings, QTimer
 
-# --- 1. MODERN TOGGLE SWITCH ---
+# --- CONSTANTS ---
+ACCENT       = "#0984E3"  
+ACCENT_FADE  = "rgba(9, 132, 227, 0.15)"
+TEXT_MAIN    = "#2D3436" 
+TEXT_DIM     = "#636E72" 
+TEXT_QUIET   = "#A4AAB0" 
+BG_CARD      = "#FFFFFF"
+BG_SOFT      = "#F8F9FA" 
+BORDER_SOFT  = "#ECEFF1"
+SUCCESS      = "#00B894"
+WARNING      = "#FAB1A0"
+
+# --- SUPPORTED APPS LIST ---
+SUPPORTED_APPS = [
+    # --- DESIGN & CREATIVE ---
+    "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
+    "After Effects", "Lightroom", "Adobe XD",
+    "Blender", "Figma", "Canva", "DaVinci Resolve",
+    
+    # --- 3D & ENGINEERING ---
+    "Unity", "Unreal Editor", "Maya", "3ds Max", 
+    "Cinema 4D", "AutoCAD", "SolidWorks",
+    
+    # --- CODING & DEV ---
+    "Visual Studio Code", "Visual Studio", "PyCharm", 
+    "IntelliJ IDEA", "Android Studio", "Sublime Text", 
+    "WebStorm", "Godot",
+    
+    # --- WRITING & OFFICE ---
+    "Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint",
+    "Notion", "Obsidian", "Evernote", "Scrivener", 
+    "Notepad", "Notepad++"
+]
+
+# --- 0. COLLAPSIBLE BOX (The new feature) ---
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+        
+        # Toggle Button
+        self.toggle_button = QPushButton(title)
+        self.toggle_button.setStyleSheet("""
+            QPushButton { text-align: left; background: transparent; border: none; font-weight: bold; color: #636E72; padding: 5px; }
+            QPushButton:hover { color: #0984E3; }
+            QPushButton:checked { color: #2D3436; }
+        """)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)
+        self.toggle_button.setCursor(Qt.PointingHandCursor)
+        self.toggle_button.clicked.connect(self.on_pressed)
+
+        # Content Area (Hidden by default)
+        self.content_area = QWidget()
+        self.content_area.setMaximumHeight(0)
+        self.content_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
+        # Main Layout
+        self.lay = QVBoxLayout(self)
+        self.lay.setSpacing(0)
+        self.lay.setContentsMargins(0, 0, 0, 0)
+        self.lay.addWidget(self.toggle_button)
+        self.lay.addWidget(self.content_area)
+        
+        # Animation
+        self.anim = QPropertyAnimation(self.content_area, b"maximumHeight")
+        self.anim.setDuration(300)
+        self.anim.setEasingCurve(QEasingCurve.InOutQuad)
+
+    def set_content_layout(self, layout):
+        self.content_area.setLayout(layout)
+
+    def on_pressed(self):
+        checked = self.toggle_button.isChecked()
+        self.toggle_button.setText("▼ " + self.toggle_button.text()[2:] if checked else "▶ " + self.toggle_button.text()[2:])
+        
+        # Calculate height
+        content_height = self.content_area.layout().sizeHint().height()
+        
+        self.anim.setDirection(QAbstractAnimation.Forward if checked else QAbstractAnimation.Backward)
+        self.anim.setStartValue(0)
+        self.anim.setEndValue(content_height)
+        self.anim.start()
+
+# --- 1. TOGGLE SWITCH ---
 class ToggleSwitch(QCheckBox):
     def __init__(self, text=""):
         super().__init__(text)
@@ -114,7 +201,7 @@ class ColorPresetButton(QPushButton):
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(self.rect().adjusted(1,1,-1,-1))
 
-# --- 4. SETTING CARD (Paint-Based) ---
+# --- 4. SETTING CARD ---
 class SettingCard(QWidget):
     def __init__(self, title):
         super().__init__()
@@ -123,7 +210,6 @@ class SettingCard(QWidget):
         self.main_layout.setSpacing(15)
         
         lbl_title = QLabel(title)
-        # Explicitly remove border/background for title
         lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #0984E3; border: none; background: transparent;")
         self.main_layout.addWidget(lbl_title)
         
@@ -135,12 +221,8 @@ class SettingCard(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        
-        # White Card Background
         painter.setBrush(QColor("#FFFFFF"))
-        # Subtle Border
         painter.setPen(QPen(QColor("#E0E0E0"), 1))
-        
         rect = self.rect().adjusted(1, 1, -1, -1)
         painter.drawRoundedRect(rect, 12, 12)
 
@@ -167,17 +249,27 @@ class SettingsTab(QWidget):
 
     def __init__(self):
         super().__init__()
+        
+        # --- SAFE MODE: Save settings to 'config.ini' in User Profile ---
+        # Path: C:\Users\YourName\Ikiflow_Data\config.ini
+        base_path = Path(os.environ['USERPROFILE']) / "Ikiflow_Data"
+        # Ensure the folder exists (it should, but just in case)
+        base_path.mkdir(parents=True, exist_ok=True)
+        ini_path = base_path / "config.ini"
+        
+        # Initialize Settings with Explicit File Path
+        self.settings = QSettings(str(ini_path), QSettings.IniFormat)
+        
         self.init_ui()
         self.load_settings()
 
     def init_ui(self):
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        # Seamless Scrollbar CSS
         scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
             QScrollBar:vertical { border: none; background: transparent; width: 6px; margin: 0px 0px 0px 0px; }
@@ -188,10 +280,10 @@ class SettingsTab(QWidget):
         """)
         
         content_widget = QWidget()
-        content_widget.setStyleSheet("background: transparent;") # Force transparent
+        content_widget.setStyleSheet("background: transparent;") 
         content_layout = QVBoxLayout(content_widget)
-        content_layout.setSpacing(20) # More breathing room between cards
-        content_layout.setContentsMargins(5, 5, 5, 5) # Tight margins so cards are wide
+        content_layout.setSpacing(20) 
+        content_layout.setContentsMargins(5, 5, 5, 5) 
 
         # --- CARD 1: VISUALS ---
         card_visuals = SettingCard("Widget Appearance")
@@ -199,36 +291,14 @@ class SettingsTab(QWidget):
         row_style = QHBoxLayout()
         row_style.addWidget(QLabel("Style Preset:"))
         
-        # --- FIXED DROPDOWN MENU STYLE ---
         self.combo_style = QComboBox()
-        # This explicit style ensures the popup list (QAbstractItemView) is white
         self.combo_style.setStyleSheet("""
-            QComboBox { 
-                padding: 5px; 
-                border: 1px solid #DFE6E9; 
-                border-radius: 5px; 
-                background-color: #F8F9FA;
-                padding-right: 28px; 
-            }
-            QComboBox::drop-down { 
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 20px;
-                border-left: 1px solid #DFE6E9;
-                background: transparent;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #FFFFFF;
-                color: #2D3436;
-                selection-background-color: #F1F2F6;
-                selection-color: #0984E3;
-                border: 1px solid #E0E0E0;
-                outline: none;
-            }
+            QComboBox { padding: 5px; border: 1px solid #DFE6E9; border-radius: 5px; background-color: #F8F9FA; padding-right: 28px; }
+            QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 20px; border-left: 1px solid #DFE6E9; background: transparent; }
+            QComboBox QAbstractItemView { background-color: #FFFFFF; color: #2D3436; selection-background-color: #F1F2F6; selection-color: #0984E3; border: 1px solid #E0E0E0; outline: none; }
         """)
         self.combo_style.addItems(["Standard Pill", "Modern Box", "Minimal Text", "Bold & Barless", "Glass Panel"])
         self.combo_style.currentIndexChanged.connect(self.emit_design_update)
-        
         row_style.addWidget(self.combo_style, 1)
         card_visuals.add_layout(row_style)
 
@@ -260,10 +330,7 @@ class SettingsTab(QWidget):
         card_visuals.add_widget(self.slider_op)
 
         btn_preview = QPushButton("Toggle Desktop Preview")
-        btn_preview.setStyleSheet("""
-            QPushButton { background-color: #F8F9FA; color: #2D3436; border: 1px solid #DFE6E9; border-radius: 6px; padding: 8px; font-weight: bold;}
-            QPushButton:hover { background-color: #E0E0E0; }
-        """)
+        btn_preview.setStyleSheet("QPushButton { background-color: #F8F9FA; color: #2D3436; border: 1px solid #DFE6E9; border-radius: 6px; padding: 8px; font-weight: bold;} QPushButton:hover { background-color: #E0E0E0; }")
         btn_preview.clicked.connect(self.preview_toggled.emit)
         card_visuals.add_widget(btn_preview)
         
@@ -278,6 +345,9 @@ class SettingsTab(QWidget):
         card_overlay.add_widget(QLabel("Custom Message:"))
         card_overlay.add_widget(self.input_msg)
         content_layout.addWidget(card_overlay)
+
+        # --- NEW: APP SELECTION GROUP (Correct Placement) ---
+        content_layout.addWidget(self.create_app_selection_group())
 
         # --- CARD 3: SYSTEM ---
         card_sys = SettingCard("System & Behavior")
@@ -307,20 +377,14 @@ class SettingsTab(QWidget):
 
         content_layout.addStretch()
         scroll.setWidget(content_widget)
-        main_layout.addWidget(scroll)
+        self.main_layout.addWidget(scroll)
 
         # --- CARD 4: HELP & FEEDBACK ---
         card_help = SettingCard("Support")
-        
         btn_feedback = QPushButton("Send Feedback / Report Bug")
         btn_feedback.setCursor(Qt.PointingHandCursor)
-        btn_feedback.setStyleSheet("""
-            QPushButton { background-color: #0984E3; color: white; border-radius: 6px; padding: 10px; font-weight: bold; border: none;}
-            QPushButton:hover { background-color: #74B9FF; }
-        """)
-        # Emit signal when clicked
+        btn_feedback.setStyleSheet("QPushButton { background-color: #0984E3; color: white; border-radius: 6px; padding: 10px; font-weight: bold; border: none;} QPushButton:hover { background-color: #74B9FF; }")
         btn_feedback.clicked.connect(self.feedback_clicked.emit)
-        
         card_help.add_widget(btn_feedback)
         content_layout.addWidget(card_help)
 
@@ -328,16 +392,12 @@ class SettingsTab(QWidget):
         self.preferences[key] = value
 
     def emit_design_update(self):
-        settings = QSettings()
-
         sel_btn = self.color_group.checkedButton()
         color = sel_btn.color if sel_btn else "#0984E3"
 
-        # --- SAVE ---
-        settings.setValue("style_idx", self.combo_style.currentIndex())
-        settings.setValue("radius", self.slider_round.value())
-        settings.setValue("theme_color", color)
-        # ------------
+        self.settings.setValue("style_idx", self.combo_style.currentIndex())
+        self.settings.setValue("radius", self.slider_round.value())
+        self.settings.setValue("theme_color", color)
 
         self.widget_style_updated.emit(
             self.combo_style.currentIndex(),
@@ -346,12 +406,8 @@ class SettingsTab(QWidget):
         )
 
     def emit_props_update(self):
-        settings = QSettings()
-
-        # --- SAVE ---
-        settings.setValue("scale", self.slider_scale.value())
-        settings.setValue("opacity", self.slider_op.value())
-        # ------------
+        self.settings.setValue("scale", self.slider_scale.value())
+        self.settings.setValue("opacity", self.slider_op.value())
 
         self.widget_props_updated.emit(
             self.slider_scale.value(),
@@ -364,34 +420,68 @@ class SettingsTab(QWidget):
         self.overlay_text_updated.emit(text)
 
     def load_settings(self):
-        settings = QSettings()
+        style_idx = int(self.settings.value("style_idx", 0))
+        radius = int(self.settings.value("radius", 50))
+        scale = int(self.settings.value("scale", 100))
+        opacity = int(self.settings.value("opacity", 100))
+        color = self.settings.value("theme_color", "#0984E3")
 
-        # Load values (with defaults if first run)
-        style_idx = int(settings.value("style_idx", 0))
-        radius = int(settings.value("radius", 50))
-        scale = int(settings.value("scale", 100))
-        opacity = int(settings.value("opacity", 100))
-        color = settings.value("theme_color", "#0984E3")
-
-        # Apply to UI Components
         self.combo_style.setCurrentIndex(style_idx)
-        self.slider_round.val = radius  # Update slider internal value
+        self.slider_round.val = radius 
         self.slider_scale.val = scale
         self.slider_op.val = opacity
 
-        # Find and check the correct color button
         for btn in self.color_group.buttons():
             if btn.color == color:
                 btn.setChecked(True)
                 break
 
-        # Force the UI to repaint the sliders
         self.slider_round.update()
         self.slider_scale.update()
         self.slider_op.update()
 
-        # Trigger updates so the Floating Widget sees these loaded values immediately
         QTimer.singleShot(100, self.emit_design_update)
         QTimer.singleShot(100, self.emit_props_update)
 
+    # --- APP SELECTION GROUP (Correct Placement) ---
+    def create_app_selection_group(self):
+        card = SettingCard("Auto-Start Triggers")
+        
+        desc = QLabel("Ikiflow detects these apps and offers to start a timer.")
+        desc.setStyleSheet(f"color: {TEXT_DIM}; font-size: 11px; margin-bottom: 5px;")
+        desc.setWordWrap(True)
+        card.add_widget(desc)
+        
+        # CollapsibleBox logic
+        collapsible = CollapsibleBox("▶  Select Apps to Monitor")
+        
+        grid = QGridLayout()
+        self.app_checks = {} 
+        
+        sorted_apps = sorted(SUPPORTED_APPS)
+        
+        for i, app_name in enumerate(sorted_apps):
+            chk = QCheckBox(app_name)
+            chk.setCursor(Qt.PointingHandCursor)
+            chk.setStyleSheet(f"color: {TEXT_MAIN}; font-size: 12px;")
             
+            # --- FIX: Default is now False (Unchecked) ---
+            is_enabled = self.settings.value(f"app_trigger_{app_name}", False, type=bool)
+            chk.setChecked(is_enabled)
+            
+            chk.toggled.connect(lambda checked, name=app_name: self.save_app_state(name, checked))
+            
+            self.app_checks[app_name] = chk
+            
+            row = i // 2
+            col = i % 2
+            grid.addWidget(chk, row, col)
+            
+        collapsible.set_content_layout(grid)
+        card.add_widget(collapsible)
+        
+        return card
+
+    def save_app_state(self, app_name, is_checked):
+        self.settings.setValue(f"app_trigger_{app_name}", is_checked)
+        # print(f"DEBUG: Set {app_name} to {is_checked}") # Commented out for production

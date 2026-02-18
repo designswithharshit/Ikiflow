@@ -1,0 +1,37 @@
+==========================================================================
+Welcome to Ikiflow 2.4.4
+Release Date: February 2026
+==========================================================================
+
+Thank you for choosing Ikiflow. This installer will guide you through 
+setting up your new focus companion. Our goal is to help you reclaim your 
+time with minimal friction.
+
+WHAT TO EXPECT:
+--------------------------------------------------------------------------
+1. Clean Installation:
+   Ikiflow runs 100% locally on your machine. All your data (focus history, 
+   settings, and logs) is stored in a simple JSON file within your 
+   installation folder. We do not upload your personal activity data to 
+   the cloud.
+
+2. System Impact:
+   This application is lightweight (~50MB) and optimized for low CPU usage. 
+   It installs a small background monitor to detect when you open productive 
+   apps (like VS Code or Photoshop) to help you trigger flow states 
+   automatically.
+
+3. Privacy First:
+   Ikiflow detects active window titles solely to trigger the "Quick Start" 
+   feature. This data is processed in real-time on your PC and is never 
+   transmitted externally.
+
+BETA NOTICE:
+--------------------------------------------------------------------------
+While we have tested this release extensively, Ikiflow is constantly 
+evolving. If you encounter any unique behaviors (or if the Ghost Button 
+is too hard to catch!), please use the in-app "Feedback" tool to let us 
+know.
+
+--------------------------------------------------------------------------
+Click "Next" to begin the installation.

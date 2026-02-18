@@ -18,7 +18,7 @@ from Ikiflow_style import STYLESHEET
 from Ikiflow_audio import SoundEngine
 from Ikiflow_components import (IntentDialog, ModernWindowButton, CircularTimeInput, 
                                 CustomLinearInput, FloatingWidget, OverlayWindow, QuickStartDialog)
-from Ikiflow_settings import SettingsTab
+from Ikiflow_settings import SettingsTab, SUPPORTED_APPS
 from Ikiflow_feedback import FeedbackDialog
 from Ikiflow_data import HistoryManager, get_active_window_title
 from Ikiflow_analyzer import AnalyzerWindow
@@ -29,7 +29,7 @@ from Ikiflow_analyzer import AnalyzerWindow
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.current_version = "2.4.6"
+        self.current_version = "2.4.7"
         self.setWindowTitle("Ikiflow")
         try:
             self.setWindowIcon(QIcon(resource_path("IkiflowIcon.ico")))
@@ -122,21 +122,29 @@ class MainWindow(QMainWindow):
         title = get_active_window_title()
         if not title: return
 
-        # 4. Trigger List (Add your apps here)
-        triggers = [
-            "Adobe Illustrator", "Photoshop", "InDesign", "Premiere", 
-            "After Effects", "Blender", "Figma", "Visual Studio Code", 
-            "PyCharm", "Unity", "Unreal Editor", "Notepad", "Google Chrome",
-            "Youtube", "Github Desktop", "Github"
-        ]
+        def monitor_context(self):
+            # ... (safety checks remain the same) ...
+            if self.is_running or self.isVisible(): return
+
+            title = get_active_window_title()
+            if not title: return
+
+        # --- DYNAMIC TRIGGER LIST ---
+        active_triggers = []
         
+        # settings is available globally via QApplication or self.settings if you initialized it
+        settings = QSettings() 
+        
+        for app in SUPPORTED_APPS:
+            # Check if user enabled this app (Default True)
+            if settings.value(f"app_trigger_{app}", True, type=bool):
+                active_triggers.append(app)
+        
+        # --- DETECTION LOGIC ---
         detected = None
-        title_lower = title.lower()
-        
-        # Case-insensitive check
-        for t in triggers:
-            if t.lower() in title_lower:
-                detected = t # Keep original casing for display
+        for t in active_triggers:
+            if t.lower() in title.lower():
+                detected = t
                 break
         
         # 5. Smart Logic

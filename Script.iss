@@ -3,10 +3,10 @@
 ; Non-commercial use only
 
 #define MyAppName "Ikiflow"
-#define MyAppVersion "2.4.6"
+#define MyAppVersion "2.4.7"
 #define MyAppPublisher "Harshit Kashyap, Personal Project"
 #define MyAppURL "https://github.com/designswithharshit/Ikiflow"
-#define MyAppExeName "Ikiflow_2.4.6.exe"
+#define MyAppExeName "Ikiflow_2.4.7.exe"
 #define MyAppAssocName MyAppName + " File"
 #define MyAppAssocExt ".myp"
 #define MyAppAssocKey StringChange(MyAppAssocName, " ", "") + MyAppAssocExt
@@ -53,8 +53,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "startupicon"; Description: "Start {#MyAppName} automatically with Windows"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "E:\Useful APPS\Lumina Focus\Ikiflow_2.4.4\dist\Ikiflow_2.4.6\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "E:\Useful APPS\Lumina Focus\Ikiflow_2.4.4\dist\Ikiflow_2.4.6\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "E:\Useful APPS\Lumina Focus\Ikiflow_2.4.4\dist\Ikiflow_2.4.7\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "E:\Useful APPS\Lumina Focus\Ikiflow_2.4.4\dist\Ikiflow_2.4.7\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Registry]
